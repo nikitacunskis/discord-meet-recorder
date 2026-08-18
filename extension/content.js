@@ -65,18 +65,27 @@
     return { name: '', userId: null };
   }
 
+  // Vai atvērts zvana (flīžu) skats? Ja jā, ticam tikai tam — sānjoslā redzami
+  // arī CITU kanālu cilvēki un viņu runāšanas indikatori.
+  const tilesVisible = () =>
+    document.querySelector('[data-selenium-video-tile]') !== null;
+
   function currentSpeakers() {
     const now = new Map();
+    const onlyTiles = tilesVisible();
     // galvenais signāls: inline stils ar var(--status-speaking)
     for (const el of document.querySelectorAll('[style*="status-speaking"]')) {
+      if (onlyTiles && !el.closest('[data-selenium-video-tile]')) continue;
       const info = speakerInfo(el);
       if (info.name) now.set(info.userId || info.name, info);
     }
     // rezerves signāls: sānjoslas usernameSpeaking__<hash> klase
-    for (const el of document.querySelectorAll('[class*="usernameSpeaking"]')) {
-      const info = speakerInfo(el);
-      if (info.name && !now.has(info.userId || info.name))
-        now.set(info.userId || info.name, info);
+    if (!onlyTiles) {
+      for (const el of document.querySelectorAll('[class*="usernameSpeaking"]')) {
+        const info = speakerInfo(el);
+        if (info.name && !now.has(info.userId || info.name))
+          now.set(info.userId || info.name, info);
+      }
     }
     return now;
   }
@@ -104,14 +113,10 @@
   // runātāju intervāliem ir vairāk nekā pietiekama.
   setInterval(sweep, 250);
 
-  // Visi balss kanāla dalībnieki (ne tikai runājošie) — paneļa režģim.
+  // Manas istabas dalībnieki — TIKAI no flīžu (zvana) skata. Sānjoslu
+  // neizmantojam: tur redzami arī citu kanālu cilvēki.
   function currentParticipants() {
     const seen = new Map();
-    for (const vu of document.querySelectorAll('[class*="voiceUser"]')) {
-      const nameEl = vu.querySelector('[class*="username"]');
-      const name = nameEl && (nameEl.textContent || '').trim();
-      if (name) seen.set(userIdFrom(vu) || name, name);
-    }
     for (const tile of document.querySelectorAll('[data-selenium-video-tile]')) {
       const ft = tile.querySelector('[class*="focusTarget"][aria-label]');
       let name = '';
