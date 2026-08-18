@@ -89,7 +89,7 @@ function logLine(text, cls) {
 
 // ---------- iestatījumi ----------
 
-const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setReport', 'setAuto', 'setOutDir'];
+const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setAuto', 'setOutDir'];
 const MODEL = 'large-v3-turbo'; // vienīgā opcija
 const SCRIPT_PATH = '~/git/personal/discord-voice-transcriber/tools/transcribe.py';
 
@@ -143,6 +143,101 @@ els.micBtn.addEventListener('click', () => {
   micOn = !micOn;
   chrome.storage.local.set({ dvtMicOn: micOn });
   renderMicBtn();
+});
+
+// ---------- mikrofona ierīce + līmeņa mērītājs ----------
+// Chrome "default" ievade bieži NAV tas mikrofons, ko lieto Discord
+// (Continuity/iPhone, virtuālās ierīces kā Krisp) — tad ierakstā ir šņākoņa.
+
+async function populateMics() {
+  const sel = document.getElementById('setMicDev');
+  const stored = (await chrome.storage.local.get('dvtSettings')).dvtSettings || {};
+  const want = stored.setMicDev || '';
+  let devs = [];
+  try { devs = await navigator.mediaDevices.enumerateDevices(); } catch (e) { return; }
+  sel.innerHTML = '';
+  const def = document.createElement('option');
+  def.value = '';
+  def.textContent = t('micDefault');
+  sel.appendChild(def);
+  for (const d of devs.filter((x) => x.kind === 'audioinput' && x.deviceId && x.deviceId !== 'default')) {
+    const o = document.createElement('option');
+    o.value = d.deviceId;
+    o.textContent = d.label || 'mic ' + (sel.options.length);
+    sel.appendChild(o);
+  }
+  if ([...sel.options].some((o) => o.value === want)) sel.value = want;
+}
+navigator.mediaDevices.addEventListener('devicechange', populateMics);
+setTimeout(populateMics, 300); // pēc i18n init
+
+function micConstraints() {
+  const dev = document.getElementById('setMicDev').value;
+  const c = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  if (dev) c.deviceId = { exact: dev };
+  return c;
+}
+
+let meterRaf = null;
+let meterCtx = null;
+let silentSince = 0;
+let silentWarned = false;
+
+function startMeter(s) {
+  stopMeter();
+  document.getElementById('micMeter').hidden = false;
+  meterCtx = new AudioContext();
+  const an = meterCtx.createAnalyser();
+  an.fftSize = 512;
+  meterCtx.createMediaStreamSource(s).connect(an);
+  const buf = new Float32Array(an.fftSize);
+  silentSince = Date.now();
+  silentWarned = false;
+  const tick = () => {
+    an.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    document.getElementById('micLevel').style.width = Math.min(100, rms * 300) + '%';
+    if (rms > 0.004) {
+      silentSince = Date.now();
+    } else if (!silentWarned && Date.now() - silentSince > 6000 &&
+               recorder && recorder.state === 'recording') {
+      // 6s pilnīga klusuma ieraksta laikā = gandrīz droši nepareizā ierīce
+      silentWarned = true;
+      logLine(t('micSilent'));
+      setStatus(t('micSilent'), true);
+    }
+    meterRaf = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function stopMeter() {
+  if (meterRaf) cancelAnimationFrame(meterRaf);
+  meterRaf = null;
+  if (meterCtx) meterCtx.close().catch(() => {});
+  meterCtx = null;
+  const m = document.getElementById('micMeter');
+  if (m) m.hidden = true;
+}
+
+// Ierīces maiņa -> 4 s dzīvais tests ar mērītāju (ja šobrīd neierakstām)
+let micTestStream = null;
+document.getElementById('setMicDev').addEventListener('change', async () => {
+  if (recorder && recorder.state === 'recording') return;
+  try {
+    if (micTestStream) micTestStream.getTracks().forEach((tr) => tr.stop());
+    micTestStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+    startMeter(micTestStream);
+    setTimeout(() => {
+      if (micTestStream) micTestStream.getTracks().forEach((tr) => tr.stop());
+      micTestStream = null;
+      if (!(recorder && recorder.state === 'recording')) stopMeter();
+    }, 4000);
+  } catch (e) {
+    logLine(t('micWarn1') + ' (' + e.name + ')');
+  }
 });
 
 function buildCommand(base) {
@@ -446,9 +541,9 @@ async function startRecording() {
     micStream = null;
     if (micOn) {
       try {
-        micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        });
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+        startMeter(micStream);
+        populateMics(); // pēc piekļuves parādās ierīču nosaukumi
       } catch (e) {
         logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
         if (e.name === 'NotAllowedError') {
@@ -553,6 +648,7 @@ function cleanup() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   if (micStream) micStream.getTracks().forEach((t) => t.stop());
   if (audioCtx) audioCtx.close().catch(() => {});
+  stopMeter();
   stream = null;
   micStream = null;
   audioCtx = null;

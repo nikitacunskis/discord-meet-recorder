@@ -176,3 +176,13 @@ h2 { font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
 button svg { display: block; margin: auto; }
 #micBtn svg { width: 20px; height: 20px; }
 .search-icon svg { display: block; }
+
+/* mikrofona līmeņa mērītājs */
+.mic-meter {
+  width: 64px; height: 8px; background: #2b2d31; border: 1px solid #3f4147;
+  border-radius: 4px; overflow: hidden; align-self: center;
+}
+#micLevel {
+  display: block; height: 100%; width: 0%;
+  background: #23a55a; transition: width 80ms linear;
+}

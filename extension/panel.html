@@ -11,6 +11,7 @@
   <div class="rec-controls">
     <button id="recBtn" data-i18n="start">● Sākt ierakstu</button>
     <button id="micBtn" title=""></button>
+    <span class="mic-meter" id="micMeter" hidden><span id="micLevel"></span></span>
   </div>
 
   <div class="row">
@@ -47,6 +48,11 @@
         <option value="lv" data-i18n="langLv">latviešu</option>
         <option value="ru" data-i18n="langRu">krievu</option>
         <option value="en" data-i18n="langEn">angļu</option>
+      </select>
+    </label>
+    <label><span data-i18n="micDevice">Mikrofons</span>
+      <select id="setMicDev">
+        <option value="" data-i18n="micDefault">sistēmas noklusētais</option>
       </select>
     </label>
     <div class="toggles">
