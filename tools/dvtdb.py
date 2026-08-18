@@ -139,6 +139,12 @@ def update_line(db, line_id: int, speaker_name: str, start_dt_ms: int,
     db.commit()
 
 
+def delete_recording(db, base: str) -> None:
+    """Izdzēš ierakstu; text_lines aiziet līdzi caur ON DELETE CASCADE."""
+    db.execute("DELETE FROM recordings WHERE base=?", (base,))
+    db.commit()
+
+
 def delete_line(db, line_id: int) -> None:
     db.execute("DELETE FROM text_lines WHERE id=?", (line_id,))
     db.commit()

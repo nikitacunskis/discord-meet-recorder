@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -210,6 +211,19 @@ def main() -> None:
                                   (msg.get("q") or "").strip())
             res.update({"type": "list", "dir": str(d)})
             send(res)
+        elif t == "delete-recording":
+            b = msg["base"]
+            # 1+2) DB rinda un text_lines (CASCADE)
+            db = dvtdb.connect()
+            dvtdb.delete_recording(db, b)
+            db.close()
+            # 3) faili un mape (tikai base_dir iekšienē, tikai precīzi šis base)
+            folder = base_dir / b
+            if folder.is_dir() and folder.parent == base_dir:
+                shutil.rmtree(folder)
+            for legacy in base_dir.glob(b + ".*"):  # vecais plakanais izkārtojums
+                legacy.unlink()
+            send({"type": "recording-deleted", "base": b})
         elif t == "pick-dir":
             # macOS mapes izvēles dialogs — panelim nav pieejas failu sistēmai
             r = subprocess.run(

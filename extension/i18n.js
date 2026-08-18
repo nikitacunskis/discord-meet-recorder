@@ -2,6 +2,7 @@
 // Valodu izvēlas iestatījumos (setUiLang); noklusēti — pārlūka valoda.
 const DVT_STRINGS = {
   en: {
+    deleteRec: 'Delete recording (files + DB)',
     searchPh: 'search by call id, title, or content', micTipOn: 'Microphone ON — your voice will be recorded', micTipOff: 'Microphone OFF — your voice will NOT be recorded', show: 'Show', hide: 'Hide',
     renameTitle: 'Rename', titlePh: 'Title…',
     start: '● Start recording', stop: '■ Stop & save', statusIdle: 'Not recording',
@@ -43,6 +44,7 @@ const DVT_STRINGS = {
     edSave: 'Save', edCancel: 'Cancel',
   },
   lv: {
+    deleteRec: 'Dzēst ierakstu (faili + DB)',
     searchPh: 'meklē pēc ID, nosaukuma vai satura', micTipOn: 'Mikrofons IESLĒGTS — tava balss tiks ierakstīta', micTipOff: 'Mikrofons IZSLĒGTS — tava balss NETIKS ierakstīta', show: 'Rādīt', hide: 'Slēpt',
     renameTitle: 'Pārsaukt', titlePh: 'Nosaukums…',
     start: '● Sākt ierakstu', stop: '■ Beigt un saglabāt', statusIdle: 'Nav ieraksta',
@@ -84,6 +86,7 @@ const DVT_STRINGS = {
     edSave: 'Saglabāt', edCancel: 'Atcelt',
   },
   de: {
+    deleteRec: 'Aufnahme löschen (Dateien + DB)',
     searchPh: 'Suche nach ID, Titel oder Inhalt', micTipOn: 'Mikrofon AN — deine Stimme wird aufgenommen', micTipOff: 'Mikrofon AUS — deine Stimme wird NICHT aufgenommen', show: 'Anzeigen', hide: 'Ausblenden',
     renameTitle: 'Umbenennen', titlePh: 'Titel…',
     start: '● Aufnahme starten', stop: '■ Stoppen & speichern', statusIdle: 'Keine Aufnahme',
@@ -125,6 +128,7 @@ const DVT_STRINGS = {
     edSave: 'Speichern', edCancel: 'Abbrechen',
   },
   zh: {
+    deleteRec: '删除录音（文件 + 数据库）',
     searchPh: '按 ID、标题或内容搜索', micTipOn: '麦克风已开——将录制你的声音', micTipOff: '麦克风已关——不会录制你的声音', show: '显示', hide: '隐藏',
     renameTitle: '重命名', titlePh: '标题…',
     start: '● 开始录音', stop: '■ 停止并保存', statusIdle: '未在录音',

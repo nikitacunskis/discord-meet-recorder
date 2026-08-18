@@ -132,6 +132,7 @@ h2 { font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
   color: var(--muted); font-size: 15px; padding: 2px 4px;
 }
 .rec-edit:hover { color: var(--text); }
+.rec-del.danger { color: var(--red); font-size: 11px; font-weight: 700; }
 
 /* Numurēta paginācija */
 .pager { display: flex; gap: 6px; justify-content: center; margin: 10px 0; }

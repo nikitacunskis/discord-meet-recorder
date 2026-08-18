@@ -230,7 +230,7 @@ function onNativeMsg(msg) {
     requestList();
   } else if (msg.type === 'list') {
     renderRecList(msg);
-  } else if (msg.type === 'title-set') {
+  } else if (msg.type === 'title-set' || msg.type === 'recording-deleted') {
     requestList();
   } else if (msg.type === 'dir-picked') {
     if (msg.dir) {
@@ -291,7 +291,21 @@ function renderRecList(msg) {
       input.focus();
     });
 
-    card.append(pill, title, btn);
+    const del = document.createElement('button');
+    del.className = 'rec-edit rec-del';
+    del.textContent = '🗑';
+    del.title = t('deleteRec');
+    del.addEventListener('click', () => {
+      if (!del.classList.contains('danger')) {
+        del.classList.add('danger');
+        del.textContent = t('edConfirm');
+        setTimeout(() => { del.classList.remove('danger'); del.textContent = '🗑'; }, 2500);
+        return;
+      }
+      nativePort && nativePort.postMessage({ type: 'delete-recording', base: it.base });
+    });
+
+    card.append(pill, title, btn, del);
     el.appendChild(card);
   }
 
