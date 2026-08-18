@@ -105,7 +105,7 @@ def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
                 "base": f.stem,
                 "title": title_map.get(f.stem),
                 "transcript": Path(b + ".transcript.md").exists(),
-                "report": f.stem in reports or Path(b + ".report.md").exists(),
+                "report": f.stem in reports,
             })
     total = len(items)
     pages = max(1, -(-total // page_size))
@@ -155,12 +155,6 @@ def handle_load(msg, base_dir: Path) -> None:
     lines = dvtdb.get_lines(db, rec_id) if rec_id is not None else []
     rec = dvtdb.get_recording(db, base)
     report = dvtdb.get_report(db, rec_id) if rec_id is not None else None
-    if not report:
-        audio_f = find_audio(base, base_dir)
-        legacy = Path(str(audio_f.with_suffix("")) + ".report.md") if audio_f else None
-        if legacy and legacy.exists() and rec_id is not None:
-            report = {"summary": legacy.read_text(), "decisions": [], "action_items": []}
-            dvtdb.set_report(db, rec_id, report["summary"], [], [])
     send({"type": "recording", "base": base,
           "title": rec["title"] if rec else None,
           "start_dt": rec["start_dt"] if rec else None,

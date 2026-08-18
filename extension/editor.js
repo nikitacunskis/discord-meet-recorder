@@ -77,10 +77,12 @@ function renderReport(rep) {
   const body = document.getElementById('reportBody');
   body.innerHTML = '';
   if (rep.summary) {
+    const h = document.createElement('h3');
+    h.textContent = t('edSummary');
     const s = document.createElement('p');
     s.className = 'rep-summary';
     s.textContent = rep.summary;
-    body.appendChild(s);
+    body.append(h, s);
   }
   const section = (titleKey, items, cls) => {
     if (!items.length) return;
