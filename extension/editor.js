@@ -48,6 +48,7 @@ port.onMessage.addListener((msg) => {
     }
     utts = msg.lines;
     knownDurMs = utts.reduce((m, u) => Math.max(m, u.end_dt_ms), 0);
+    els.clock.textContent = `${fmt(0)} / ${knownDurMs ? fmt(knownDurMs) : '--:--:--'}`;
     render();
     els.status.textContent = `${utts.length} ${t('edLines')}` + (msg.start_dt ? ` · ${msg.start_dt}` : '');
   } else if (msg.type === 'audio-begin') {

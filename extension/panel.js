@@ -536,7 +536,13 @@ async function startRecording() {
     const mixDest = audioCtx.createMediaStreamDestination();
     const tabSrc = audioCtx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
     tabSrc.connect(mixDest);
-    if (micStream) audioCtx.createMediaStreamSource(micStream).connect(mixDest);
+    if (micStream) {
+      // mikrofons parasti ir krietni klusāks par taba skaņu — paceļam
+      const micGain = audioCtx.createGain();
+      micGain.gain.value = 1.8;
+      audioCtx.createMediaStreamSource(micStream).connect(micGain);
+      micGain.connect(mixDest);
+    }
 
     // tabCapture apklusina tabu — laižam TIKAI taba skaņu atpakaļ skaļruņos
     // (mikrofonu ne, citādi dzirdētu pats sevi ar aizturi).

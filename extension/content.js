@@ -113,8 +113,19 @@
   // runātāju intervāliem ir vairāk nekā pietiekama.
   setInterval(sweep, 250);
 
-  // Manas istabas dalībnieki — TIKAI no flīžu (zvana) skata. Sānjoslu
-  // neizmantojam: tur redzami arī citu kanālu cilvēki.
+  // Mans userId no konta paneļa (apakšā pa kreisi) avatāra URL.
+  function myUserId() {
+    const panel = document.querySelector('section[class*="panels"], [class*="panels_"]');
+    if (!panel) return null;
+    const el = panel.querySelector('[style*="avatars/"], img[src*="avatars/"]');
+    const src = el ? (el.getAttribute('style') || '') + (el.getAttribute('src') || '') : '';
+    const m = src.match(/avatars\/(\d+)\//);
+    return m ? m[1] : null;
+  }
+
+  // Manas istabas dalībnieki. Primāri no flīžu (zvana) skata; ja tas nav
+  // atvērts — no sānjoslas, bet TIKAI no tā kanāla saraksta, kurā esmu es
+  // pats (sānjoslā redzami arī citu kanālu cilvēki).
   function currentParticipants() {
     const seen = new Map();
     for (const tile of document.querySelectorAll('[data-selenium-video-tile]')) {
@@ -126,6 +137,20 @@
         name = (m ? m[1] : label).trim();
       }
       if (name) seen.set(tile.getAttribute('data-selenium-video-tile') || name, name);
+    }
+    if (seen.size === 0) {
+      const me = myUserId();
+      if (me) {
+        for (const list of document.querySelectorAll('[class*="voiceUsers"]')) {
+          if (!list.querySelector(`[style*="avatars/${me}/"]`)) continue;
+          for (const vu of list.querySelectorAll('[class*="voiceUser"]')) {
+            const nameEl = vu.querySelector('[class*="username"]');
+            const name = nameEl ? (nameEl.textContent || '').trim() : '';
+            if (name) seen.set(userIdFrom(vu) || name, name);
+          }
+          break;
+        }
+      }
     }
     return [...seen.values()];
   }
