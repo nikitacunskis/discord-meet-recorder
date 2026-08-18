@@ -33,33 +33,33 @@ function durMs() {
 }
 
 document.title = base || 'DVT redaktors';
-els.title.textContent = base || '(nav norādīts ieraksts)';
+I18N.init().then(() => { els.title.textContent = base || t('edNoBase'); });
 
 const port = chrome.runtime.connectNative('com.dvt.recorder');
 port.onDisconnect.addListener(() => {
-  els.status.textContent = 'Native host nav pieejams — pārbaudi native/install.sh un pārstartē Chrome.';
+  els.status.textContent = t('edHostMissing');
 });
 port.onMessage.addListener((msg) => {
   if (msg.type === 'recording') {
     utts = msg.lines;
     knownDurMs = utts.reduce((m, u) => Math.max(m, u.end_dt_ms), 0);
     render();
-    els.status.textContent = `${utts.length} rindas` + (msg.start_dt ? ` · ${msg.start_dt}` : '');
+    els.status.textContent = `${utts.length} ${t('edLines')}` + (msg.start_dt ? ` · ${msg.start_dt}` : '');
   } else if (msg.type === 'audio-begin') {
     audioChunks = [];
-    els.status.textContent += ' · ielādēju audio…';
+    els.status.textContent += t('edAudioLoading');
   } else if (msg.type === 'audio-chunk') {
     audioChunks.push(Uint8Array.from(atob(msg.data), (c) => c.charCodeAt(0)));
   } else if (msg.type === 'audio-end') {
     els.audio.src = URL.createObjectURL(new Blob(audioChunks, { type: 'audio/webm' }));
     audioChunks = [];
-    els.status.textContent = els.status.textContent.replace(' · ielādēju audio…', ' · audio gatavs');
+    els.status.textContent = els.status.textContent.replace(t('edAudioLoading'), t('edAudioReady'));
   } else if (msg.type === 'audio-missing') {
-    els.status.textContent += ' · audio fails nav atrasts (atskaņošana nestrādās)';
+    els.status.textContent += t('edAudioMissing');
   } else if (msg.type === 'updated' || msg.type === 'deleted') {
     // apstiprināts — nekas nav jādara, lokālais stāvoklis jau atjaunots
   } else if (msg.type === 'error') {
-    els.status.textContent = 'Kļūda: ' + msg.message;
+    els.status.textContent = t('edError') + msg.message;
   }
 });
 port.postMessage({ type: 'load', base });
@@ -99,16 +99,16 @@ function render() {
     tools.className = 'tools';
     const editBtn = document.createElement('button');
     editBtn.textContent = '✎';
-    editBtn.title = 'Labot';
+    editBtn.title = t('edEdit');
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); startEdit(row, u); });
     const delBtn = document.createElement('button');
     delBtn.textContent = '✕';
-    delBtn.title = 'Dzēst';
+    delBtn.title = t('edDelete');
     delBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!delBtn.classList.contains('danger')) {
         delBtn.classList.add('danger');
-        delBtn.textContent = 'tiešām?';
+        delBtn.textContent = t('edConfirm');
         setTimeout(() => { delBtn.classList.remove('danger'); delBtn.textContent = '✕'; }, 2500);
         return;
       }
@@ -146,8 +146,8 @@ function startEdit(row, u) {
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const save = Object.assign(document.createElement('button'), { textContent: 'Saglabāt', className: 'save' });
-  const cancel = Object.assign(document.createElement('button'), { textContent: 'Atcelt', className: 'cancel' });
+  const save = Object.assign(document.createElement('button'), { textContent: t('edSave'), className: 'save' });
+  const cancel = Object.assign(document.createElement('button'), { textContent: t('edCancel'), className: 'cancel' });
   save.addEventListener('click', () => {
     const s = parseTime(startIn.value);
     const e = parseTime(endIn.value);

@@ -28,13 +28,13 @@ const speakingNow = new Map(); // key -> name
 chrome.runtime.onMessage.addListener((msg) => {
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'dvt-content-ready') {
-    els.sensor.textContent = 'DOM sensors: aktīvs ✓';
+    els.sensor.textContent = t('sensorActive');
     els.sensor.classList.add('ok');
     return;
   }
   if (msg.type !== 'dvt-speaking') return;
 
-  els.sensor.textContent = 'DOM sensors: aktīvs ✓ (redz runātājus)';
+  els.sensor.textContent = t('sensorSeen');
   els.sensor.classList.add('ok');
 
   const key = msg.userId || msg.name;
@@ -75,7 +75,7 @@ function logLine(text, cls) {
 
 // ---------- iestatījumi ----------
 
-const SETTINGS_KEYS = ['setClaude', 'setLang', 'setReport', 'setAuto', 'setOutDir'];
+const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setReport', 'setAuto', 'setOutDir'];
 const MODEL = 'large-v3-turbo'; // vienīgā opcija
 const SCRIPT_PATH = '~/git/personal/discord-voice-transcriber/tools/transcribe.py';
 
@@ -102,9 +102,10 @@ function saveSettings() {
 for (const id of SETTINGS_KEYS)
   document.getElementById(id).addEventListener('change', () => {
     saveSettings();
+    if (id === 'setUiLang') I18N.setLang(document.getElementById(id).value);
     if (lastFiles) showCommand(lastFiles.base);
   });
-loadSettings();
+loadSettings().then(() => I18N.init());
 
 function buildCommand(base) {
   const claude = document.getElementById('setClaude').value;
@@ -124,7 +125,7 @@ function showCommand(base) {
 document.getElementById('copyCmd').addEventListener('click', () => {
   if (!lastFiles) return;
   navigator.clipboard.writeText(buildCommand(lastFiles.base));
-  setStatus('Komanda nokopēta — ielīmē terminālī.');
+  setStatus(t('copied'));
 });
 
 function collectSettings() {
@@ -156,8 +157,7 @@ function connectNative() {
   nativePort.onDisconnect.addListener(() => {
     nativePort = null;
     els.native = els.native || document.getElementById('native');
-    els.native.textContent =
-      'Native host: nav instalēts — faili kritīs Downloads (sk. native/install.sh)';
+    els.native.textContent = t('nativeMissing');
     els.native.classList.remove('ok');
   });
   nativePort.postMessage({ type: 'ping' });
@@ -167,16 +167,16 @@ function connectNative() {
 function onNativeMsg(msg) {
   const nativeEl = document.getElementById('native');
   if (msg.type === 'pong') {
-    nativeEl.textContent = 'Native host: aktīvs ✓ (auto-saglabāšana un transkripcija)';
+    nativeEl.textContent = t('nativeActive');
     nativeEl.classList.add('ok');
   } else if (msg.type === 'saved') {
-    logLine('Saglabāts: ' + msg.path);
-    setStatus('Saglabāts mapē, transkripcija rit…');
+    logLine(t('savedPrefix') + msg.path);
+    setStatus(t('savedFolder'));
     nativePort && nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
   } else if (msg.type === 'log') {
     logLine(msg.line);
   } else if (msg.type === 'done') {
-    setStatus(msg.code === 0 ? 'Transkripcija pabeigta: ' + msg.base : 'Transkripcija neizdevās (skat. žurnālu)');
+    setStatus(msg.code === 0 ? t('transDone') + msg.base : t('transFail'));
     nativePort && nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
   } else if (msg.type === 'list') {
     renderRecList(msg.items, msg.dir);
@@ -194,9 +194,9 @@ function renderRecList(items, dir) {
   el.title = dir;
   for (const it of items) {
     const div = document.createElement('div');
-    div.textContent = `${it.base}  ${it.report ? '✓ report' : it.transcript ? '✓ transcript' : '⏳ tikai audio'}`;
+    div.textContent = `${it.base}  ${it.report ? '✓ report' : it.transcript ? '✓ transcript' : t('stAudioOnly')}`;
     div.style.cursor = 'pointer';
-    div.title = 'Atvērt redaktorā';
+    div.title = t('openEditor');
     div.addEventListener('click', () =>
       chrome.tabs.create({ url: chrome.runtime.getURL('editor.html') + '?base=' + encodeURIComponent(it.base) }));
     el.appendChild(div);
@@ -241,20 +241,19 @@ async function pingSensor() {
   try {
     const tab = await findDiscordTab();
     if (!tab) {
-      els.sensor.textContent = 'DOM sensors: nav atvērta discord.com taba';
+      els.sensor.textContent = t('sensorNoTab');
       els.sensor.classList.remove('ok');
       return;
     }
     const resp = await chrome.tabs.sendMessage(tab.id, { type: 'dvt-ping' });
     if (resp && resp.type === 'dvt-pong') {
-      els.sensor.textContent = `DOM sensors: aktīvs ✓ (saraksts: ${resp.voiceUsers}, flīzes: ${resp.tiles}${
-        resp.speakers.length ? ', runā: ' + resp.speakers.join(', ') : ''
+      els.sensor.textContent = `${t('sensorActive')} (${t('diagList')}: ${resp.voiceUsers}, ${t('diagTiles')}: ${resp.tiles}${
+        resp.speakers.length ? ', ' + t('diagSpeaking') + ' ' + resp.speakers.join(', ') : ''
       })`;
       els.sensor.classList.add('ok');
     }
   } catch (e) {
-    els.sensor.textContent =
-      'DOM sensors: nav ielādēts — pārlādē Discord tabu (F5) un uzklikšķini uz ikonas vēlreiz';
+    els.sensor.textContent = t('sensorNotLoaded');
     els.sensor.classList.remove('ok');
   }
 }
@@ -286,7 +285,7 @@ async function captureTabAudio(tab) {
   } catch (e) {
     // Rezerves ceļš: Chrome koplietošanas dialogs. Izvēlies cilni "Chrome Tab" →
     // Discord tabu un ieslēdz "Also share tab audio".
-    setStatus('Dialogā izvēlies Discord tabu un ieslēdz "Also share tab audio"…');
+    setStatus(t('shareHint'));
     const display = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: true,
@@ -294,7 +293,7 @@ async function captureTabAudio(tab) {
     });
     if (display.getAudioTracks().length === 0) {
       display.getTracks().forEach((t) => t.stop());
-      throw new Error('Netika iedots taba audio — dialogā jāieslēdz "Also share tab audio".');
+      throw new Error(t('shareNoAudio'));
     }
     return { stream: display, viaTabCapture: false };
   }
@@ -304,7 +303,7 @@ async function startRecording() {
   try {
     const tab = await findDiscordTab();
     if (!tab) {
-      return setStatus('Neatradu atvērtu discord.com tabu.', true);
+      return setStatus(t('noDiscordTab'), true);
     }
 
     const cap = await captureTabAudio(tab);
@@ -321,7 +320,7 @@ async function startRecording() {
       });
     } catch (e) {
       micStream = null;
-      logLine('⚠ Mikrofons nav pieejams (' + e.name + ') — tava balss ierakstā nebūs!');
+      logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
     }
 
     audioCtx = new AudioContext();
@@ -350,21 +349,18 @@ async function startRecording() {
     document.body.classList.add('rec');
     els.startBtn.disabled = true;
     els.stopBtn.disabled = false;
-    setStatus('● Ieraksts rit');
+    setStatus(t('recRunning'));
     timerInterval = setInterval(
       () => (els.timer.textContent = fmtTime(Date.now() - t0)),
       1000
     );
-    logLine(`${fmtTime(0)} — ieraksts sākts (${tab.title || 'Discord'})`);
+    logLine(`${fmtTime(0)} ${t('recStarted')} (${tab.title || 'Discord'})`);
   } catch (e) {
     console.error(e);
     if (/has not been invoked/i.test(e.message || '')) {
-      setStatus(
-        'Chrome vēl nav devis atļauju šim tabam: aizver paneli, uzklikšķini uz paplašinājuma ikonas, esot uz Discord taba, un spied Sākt vēlreiz.',
-        true
-      );
+      setStatus(t('permHint'), true);
     } else {
-      setStatus('Neizdevās sākt: ' + e.message, true);
+      setStatus(t('startFailPrefix') + e.message, true);
     }
     cleanup();
   }
@@ -394,9 +390,9 @@ function onRecorderStop() {
   lastFiles = { audio, json, srt, base };
 
   if (nativePort) {
-    logLine(`${fmtTime(durMs)} — sūtu native hostam (${intervals.length} intervāli)…`);
+    logLine(`${fmtTime(durMs)} ${t('sentToHost')} (${intervals.length})…`);
     sendToNative(lastFiles).catch((e) => {
-      logLine('Native host kļūda, krītu uz Downloads: ' + e.message);
+      logLine(t('hostErrFallback') + e.message);
       downloadAll();
     });
   } else {
@@ -409,8 +405,8 @@ function onRecorderStop() {
     download(audio, base + '.webm');
     download(json, base + '.speakers.json');
     download(srt, base + '.speakers.srt');
-    logLine(`${fmtTime(durMs)} — saglabāts Downloads: ${base}.webm + speakers (${intervals.length} intervāli)`);
-    setStatus('Saglabāts: ' + base);
+    logLine(`${fmtTime(durMs)} ${t('savedDl')} ${base}.webm (+speakers, ${intervals.length})`);
+    setStatus(t('savedPrefix') + base);
   }
 }
 
