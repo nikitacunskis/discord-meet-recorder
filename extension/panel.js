@@ -172,6 +172,7 @@ function onNativeMsg(msg) {
   } else if (msg.type === 'saved') {
     logLine('Saglabāts: ' + msg.path);
     setStatus('Saglabāts mapē, transkripcija rit…');
+    nativePort && nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
   } else if (msg.type === 'log') {
     logLine(msg.line);
   } else if (msg.type === 'done') {
@@ -224,6 +225,13 @@ async function sendToNative(files) {
 }
 
 connectNative();
+
+// Ierakstu saraksta statusi (⏳ -> ✓) atjaunojas paši: transkripcija var ritēt
+// arī citā hosta savienojumā (piem., panelis pa vidu aizvērts/atvērts), tāpēc
+// 'done' ziņa var nepienākt — periodiska pārprasīšana to nosedz.
+setInterval(() => {
+  if (nativePort) nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
+}, 10000);
 
 // ---------- sensora ping ----------
 // content.js ielādējas agrāk par paneli, tāpēc "ready" ziņu panelis var nokavēt —
