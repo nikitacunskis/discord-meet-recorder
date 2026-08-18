@@ -1,24 +1,31 @@
 <!DOCTYPE html>
-<html lang="lv">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Mikrofona atļauja</title>
+  <title data-i18n="micPermTitle">Microphone permission for recording</title>
   <style>
-    body { font: 16px/1.6 -apple-system, system-ui, sans-serif; background: #1e1f22;
-           color: #dbdee1; display: grid; place-items: center; height: 100vh; margin: 0; }
+    :root {
+      --bg: #f4f5f7; --text: #222; --accent: #23a55a;
+      --accent-hover: #1a6334; --ok: #23a55a; --err: #cc3333;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1e1f22; --text: #dbdee1; --err: #f23f43; }
+    }
+    body { font: 16px/1.6 -apple-system, system-ui, sans-serif; background: var(--bg);
+           color: var(--text); display: grid; place-items: center; height: 100vh; margin: 0; }
     .card { max-width: 460px; text-align: center; padding: 32px; }
     button { font-size: 16px; padding: 12px 28px; border: 0; border-radius: 6px;
-             background: #23a55a; color: #fff; cursor: pointer; margin-top: 18px; }
-    button:hover { background: #1a6334; }
+             background: var(--accent); color: #fff; cursor: pointer; margin-top: 18px; }
+    button:hover { background: var(--accent-hover); }
     #result { margin-top: 18px; font-weight: 600; }
-    .ok { color: #23a55a; } .err { color: #f23f43; }
+    .ok { color: var(--ok); } .err { color: var(--err); }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1 data-i18n="micPermTitle">Mikrofona atļauja ierakstam</h1>
-    <p data-i18n="micPermExplain">Sānu panelis nevar parādīt Chrome atļaujas dialogu, tāpēc tā jāpiešķir šeit. Nospied pogu un atļauj mikrofonu — tas vajadzīgs, lai ierakstā būtu arī tava balss.</p>
-    <button id="grant" data-i18n="micPermBtn">Atļaut mikrofonu</button>
+    <h1 data-i18n="micPermTitle">Microphone permission for recording</h1>
+    <p data-i18n="micPermExplain">The side panel cannot show the Chrome permission prompt, so grant it here. Click the button and allow the microphone — it is needed so your own voice is in the recording.</p>
+    <button id="grant" data-i18n="micPermBtn">Allow microphone</button>
     <div id="result"></div>
   </div>
   <script src="i18n.js"></script>
