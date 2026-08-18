@@ -71,15 +71,32 @@ def run_transcribe(audio: Path, settings: dict) -> None:
         send({"type": "done", "code": 1, "base": audio.stem})
 
 
-def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5) -> dict:
+def _search_bases(db, q: str) -> set:
+    """Meklēšana pēc ID, nosaukuma vai transkripta satura (SQLite)."""
+    like = f"%{q}%"
+    rows = db.execute(
+        """SELECT DISTINCT r.base FROM recordings r
+           LEFT JOIN text_lines l ON l.recording_id = r.id
+           WHERE r.base LIKE ? OR r.title LIKE ?
+              OR l.speaker_line LIKE ? OR l.speaker_name LIKE ?""",
+        (like, like, like, like))
+    return {r["base"] for r in rows}
+
+
+def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
+                    q: str = "") -> dict:
     items = []
     if dirpath.exists():
         # jaunais izkārtojums: <dir>/<base>/<base>.webm; vecais: <dir>/<base>.webm
         found = list(dirpath.glob("*/*.webm")) + list(dirpath.glob("*.webm"))
         db = dvtdb.connect()
         title_map = dvtdb.titles(db)
+        matched = _search_bases(db, q) if q else None
         db.close()
         for f in sorted(found, key=lambda p: p.stem, reverse=True):
+            if matched is not None and f.stem not in matched \
+                    and q.lower() not in f.stem.lower():
+                continue
             b = str(f.with_suffix(""))
             items.append({
                 "base": f.stem,
@@ -189,9 +206,18 @@ def main() -> None:
         elif t == "list":
             d = Path(msg.get("dir") or base_dir).expanduser()
             res = list_recordings(d, int(msg.get("page") or 0),
-                                  int(msg.get("pageSize") or 5))
+                                  int(msg.get("pageSize") or 5),
+                                  (msg.get("q") or "").strip())
             res.update({"type": "list", "dir": str(d)})
             send(res)
+        elif t == "pick-dir":
+            # macOS mapes izvēles dialogs — panelim nav pieejas failu sistēmai
+            r = subprocess.run(
+                ["osascript", "-e",
+                 'POSIX path of (choose folder with prompt "Izvades mape ierakstiem")'],
+                capture_output=True, text=True)
+            picked = r.stdout.strip().rstrip("/") if r.returncode == 0 else None
+            send({"type": "dir-picked", "dir": picked})
         elif t == "set-title":
             db = dvtdb.connect()
             audio = find_audio(msg["base"], base_dir)

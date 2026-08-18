@@ -1,17 +1,18 @@
 /* Tēma seko pārlūkam: gaišās vērtības :root, tumšās @media blokā. */
 :root {
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #ececf0;
+  --bg: #ffffff;
+  --surface: #f4f5f7;
+  --surface-2: #e8e9ec;
   --text: #1e1f22;
   --muted: #6b7280;
-  --border: #d5d7db;
-  --accent: #248046;
-  --accent-hover: #1a6334;
-  --danger: #da373c;
-  --ok: #1a8a4c;
-  --chip-bg: #23a55a;
-  --chip-text: #ffffff;
+  --border: #cfd2d6;
+  --green: #2ebd59;
+  --green-hover: #27a44e;
+  --red: #da373c;
+  --red-hover: #c22f34;
+  --chip-bg: #9aa0a6;
+  --chip-on: #2ebd59;
+  --console-bg: #101010;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -21,12 +22,13 @@
     --text: #dbdee1;
     --muted: #949ba4;
     --border: #3f4147;
-    --accent: #248046;
-    --accent-hover: #2d9c57;
-    --danger: #da373c;
-    --ok: #23a55a;
-    --chip-bg: #23a55a;
-    --chip-text: #ffffff;
+    --green: #23a55a;
+    --green-hover: #2d9c57;
+    --red: #da373c;
+    --red-hover: #f23f43;
+    --chip-bg: #4e5058;
+    --chip-on: #23a55a;
+    --console-bg: #0b0b0b;
   }
 }
 
@@ -35,87 +37,136 @@ body {
   background: var(--bg);
   color: var(--text);
   margin: 0;
-  padding: 12px;
+  padding: 14px;
 }
-h1 { font-size: 15px; margin: 0 0 10px; }
-h2 {
-  font-size: 12px; text-transform: uppercase; color: var(--muted);
-  margin: 14px 0 6px;
-}
+h1 { font-size: 17px; margin: 0 0 12px; font-weight: 700; }
+h2 { font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
 .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
 .muted { color: var(--muted); }
 
-button {
-  background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 4px;
-  padding: 7px 12px; cursor: pointer; font-size: 13px;
+/* Lielā ieraksta poga + apaļais mikrofons */
+.rec-controls { display: flex; gap: 10px; align-items: center; }
+#recBtn {
+  flex: 1; background: var(--green); color: #fff; border: 0; border-radius: 10px;
+  padding: 14px 16px; font-size: 15px; font-weight: 700; cursor: pointer;
+  text-align: left;
 }
-button:hover { background: var(--border); }
-button:disabled { opacity: 0.4; cursor: default; }
-#startBtn { background: var(--accent); border-color: var(--accent); color: #fff; }
-#startBtn:hover:not(:disabled) { background: var(--accent-hover); }
-#stopBtn:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
-.rec #status { color: var(--danger); font-weight: 600; }
+#recBtn:hover { background: var(--green-hover); }
+#recBtn.recording { background: var(--red); }
+#recBtn.recording:hover { background: var(--red-hover); }
+#micBtn {
+  width: 46px; height: 46px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--red); color: #fff; font-size: 19px; flex: none;
+}
+#micBtn.off { background: var(--chip-bg); filter: grayscale(1); opacity: 0.7; }
+.rec #status { color: var(--red); font-weight: 600; }
 
-.chips { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+/* Statusa rindas — redzamas tikai tad, ja ir problēma */
+.statusline { margin: 6px 0; color: var(--red); font-size: 12px; }
+.statusline[hidden] { display: none; }
+
+/* Dalībnieku režģis */
+.chips-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px; min-height: 24px;
+}
+.chips-grid.muted { display: block; }
 .chip {
-  background: var(--chip-bg); color: var(--chip-text); border-radius: 10px;
-  padding: 2px 10px; font-size: 12px;
+  background: var(--chip-bg); color: #fff; border-radius: 8px;
+  padding: 8px 12px; font-size: 12px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.chip.on { background: var(--chip-on); }
 
-details#logDetails summary {
-  font-size: 12px; text-transform: uppercase; color: var(--muted);
-  margin: 14px 0 6px; cursor: pointer; list-style: none;
-}
-details#logDetails summary::before { content: '▸ '; }
-details#logDetails[open] summary::before { content: '▾ '; }
-#log {
-  max-height: 45vh; overflow-y: auto; font-size: 12px;
-  border-top: 1px solid var(--border);
-}
-#log div { padding: 2px 0; border-bottom: 1px solid var(--surface-2); }
-#log .on { color: var(--ok); }
-#log .off { color: var(--muted); }
-#sensor.ok, #native.ok { color: var(--ok); }
-
-.settings { display: flex; flex-direction: column; gap: 8px; }
-.settings label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+/* Iestatījumi */
+.settings { display: flex; flex-direction: column; gap: 10px; }
+.settings label { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.settings label > span:first-child { flex: none; }
 .settings select, .settings input[type="text"] {
   background: var(--surface); color: var(--text); border: 1px solid var(--border);
-  border-radius: 4px; padding: 4px 6px; font-size: 12px;
+  border-radius: 8px; padding: 6px 10px; font-size: 12px; flex: 1; max-width: 65%;
 }
-.settings input[type="text"] { flex: 1; }
-.settings .check { justify-content: flex-start; }
+.settings .toggles { display: flex; gap: 14px; flex-wrap: wrap; }
+.settings .check { justify-content: flex-start; flex: 1; min-width: 180px; }
+.settings .check input { accent-color: var(--green); width: 16px; height: 16px; }
+.dir-wrap { display: flex; gap: 6px; flex: 1; max-width: 65%; }
+.dir-wrap input { flex: 1; max-width: none; }
+#dirBtn {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+  cursor: pointer; padding: 4px 9px;
+}
+#dirBtn:hover { background: var(--surface-2); }
 
+/* Meklēšana */
+.search-wrap { position: relative; margin-bottom: 10px; }
+.search-wrap input {
+  width: 100%; box-sizing: border-box;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 34px 9px 12px; font-size: 12px;
+}
+.search-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); opacity: 0.6; }
+
+/* Ierakstu kartītes */
+.rec-card {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 12px; margin-bottom: 8px;
+}
+.pill {
+  flex: none; border-radius: 12px; padding: 3px 10px; font-size: 11px;
+  font-weight: 700; color: #fff;
+}
+.pill.ok { background: var(--green); }
+.pill.mid { background: #c98f2e; }
+.pill.wait { background: var(--chip-bg); }
+.rec-title { flex: 1; cursor: pointer; word-break: break-all; }
+.rec-title:hover { color: var(--green); text-decoration: underline; }
+.rec-title input {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--green); border-radius: 6px;
+  padding: 4px 8px; font-size: 12px;
+}
+.rec-edit {
+  flex: none; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font-size: 15px; padding: 2px 4px;
+}
+.rec-edit:hover { color: var(--text); }
+
+/* Numurēta paginācija */
+.pager { display: flex; gap: 6px; justify-content: center; margin: 10px 0; }
+.pager button {
+  min-width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.pager button:hover { background: var(--surface-2); }
+.pager button.current { background: var(--chip-bg); color: #fff; border-color: var(--chip-bg); }
+
+/* Events konsole */
+.events-head { display: flex; align-items: center; gap: 10px; }
+.events-head h2 { margin: 18px 0 8px; }
+#logToggle {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  border-radius: 6px; padding: 2px 10px; font-size: 11px; cursor: pointer;
+  margin-top: 8px;
+}
+#logToggle:hover { background: var(--surface-2); }
+#log.console {
+  background: var(--console-bg); color: #ddd; border-radius: 4px;
+  max-height: 40vh; overflow-y: auto; font: 11px/1.5 ui-monospace, Menlo, monospace;
+  padding: 8px 10px;
+}
+#log div { padding: 1px 0; }
+#log .on { color: #34c46b; }
+#log .off { color: #9aa0a6; }
+
+/* Transkripcijas komanda (fallback) */
 #cmd {
-  background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
   padding: 8px; font-size: 11px; white-space: pre-wrap; word-break: break-all;
   user-select: all;
 }
-
-/* Ierakstu tabula */
-.rec-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.rec-table td {
-  padding: 6px 8px; border-bottom: 1px solid var(--surface-2);
-  vertical-align: middle;
+#copyCmd {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer;
 }
-.rec-table tr:hover td { background: var(--surface-2); }
-.rec-title { cursor: pointer; word-break: break-all; }
-.rec-title:hover { color: var(--ok); text-decoration: underline; }
-.rec-title input {
-  width: 100%; box-sizing: border-box;
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--accent); border-radius: 3px;
-  padding: 3px 6px; font-size: 12px;
-}
-.rec-status { white-space: nowrap; color: var(--muted); width: 1%; }
-.rec-edit { width: 1%; }
-.rec-edit button {
-  padding: 2px 7px; font-size: 12px; background: none; border: none;
-  color: var(--muted); cursor: pointer;
-}
-.rec-edit button:hover { color: var(--text); background: none; }
-
-.pager { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 8px; }
-.pager button { padding: 2px 10px; }
-.pager span { color: var(--muted); font-size: 12px; }

@@ -1,15 +1,17 @@
 // Discord Call Recorder — sānu panelis.
-// Ieraksta taba audio ar tabCapture + MediaRecorder un vāc runātāju
-// notikumus no content.js. Stop -> saglabā .webm, .speakers.json, .speakers.srt.
+// Ieraksta taba audio (+ mikrofonu) un vāc runātāju notikumus no content.js.
+// Stop -> native hosts saglabā mapē un pats transkribē; fallback: Downloads.
 
 const els = {
   sensor: document.getElementById('sensor'),
-  startBtn: document.getElementById('startBtn'),
-  stopBtn: document.getElementById('stopBtn'),
+  native: document.getElementById('native'),
+  recBtn: document.getElementById('recBtn'),
+  micBtn: document.getElementById('micBtn'),
   status: document.getElementById('status'),
   timer: document.getElementById('timer'),
   nowSpeaking: document.getElementById('nowSpeaking'),
   log: document.getElementById('log'),
+  search: document.getElementById('recSearch'),
 };
 
 let recorder = null;
@@ -22,25 +24,34 @@ let t0 = 0;
 let timerInterval = null;
 let lastFiles = null; // {audio: Blob, json: Blob, srt: Blob, base: string}
 const speakingNow = new Map(); // key -> name
+let participants = []; // visi dalībnieki no pēdējā pong
+let micOn = true;
+
+// Statusa rindas rādām TIKAI tad, ja kaut kas nav kārtībā.
+function statusline(el, problemText) {
+  if (problemText) {
+    el.textContent = problemText;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
 
 // ---------- runātāju notikumi no content.js ----------
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'dvt-content-ready') {
-    els.sensor.textContent = t('sensorActive');
-    els.sensor.classList.add('ok');
+    statusline(els.sensor, null);
     return;
   }
   if (msg.type !== 'dvt-speaking') return;
 
-  els.sensor.textContent = t('sensorSeen');
-  els.sensor.classList.add('ok');
-
+  statusline(els.sensor, null);
   const key = msg.userId || msg.name;
   if (msg.speaking) speakingNow.set(key, msg.name);
   else speakingNow.delete(key);
-  renderNowSpeaking();
+  renderParticipants();
 
   if (recorder && recorder.state === 'recording') {
     const t_ms = Math.max(0, msg.t - t0);
@@ -49,17 +60,20 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-function renderNowSpeaking() {
-  if (speakingNow.size === 0) {
+// Dalībnieku režģis: visi pelēki, runājošie zaļi.
+function renderParticipants() {
+  const speaking = new Set(speakingNow.values());
+  const names = participants.length ? participants : [...speaking];
+  if (names.length === 0) {
     els.nowSpeaking.textContent = '—';
     els.nowSpeaking.classList.add('muted');
     return;
   }
   els.nowSpeaking.classList.remove('muted');
   els.nowSpeaking.innerHTML = '';
-  for (const name of speakingNow.values()) {
+  for (const name of names) {
     const chip = document.createElement('span');
-    chip.className = 'chip';
+    chip.className = 'chip' + (speaking.has(name) ? ' on' : '');
     chip.textContent = name;
     els.nowSpeaking.appendChild(chip);
   }
@@ -80,7 +94,7 @@ const MODEL = 'large-v3-turbo'; // vienīgā opcija
 const SCRIPT_PATH = '~/git/personal/discord-voice-transcriber/tools/transcribe.py';
 
 async function loadSettings() {
-  const stored = await chrome.storage.local.get('dvtSettings');
+  const stored = await chrome.storage.local.get(['dvtSettings', 'dvtMicOn']);
   const s = stored.dvtSettings || {};
   for (const id of SETTINGS_KEYS) {
     const el = document.getElementById(id);
@@ -88,6 +102,8 @@ async function loadSettings() {
     if (el.type === 'checkbox') el.checked = s[id];
     else el.value = s[id];
   }
+  micOn = stored.dvtMicOn !== false;
+  renderMicBtn();
 }
 
 function saveSettings() {
@@ -102,10 +118,29 @@ function saveSettings() {
 for (const id of SETTINGS_KEYS)
   document.getElementById(id).addEventListener('change', () => {
     saveSettings();
-    if (id === 'setUiLang') I18N.setLang(document.getElementById(id).value);
+    if (id === 'setUiLang') {
+      I18N.setLang(document.getElementById(id).value);
+      renderMicBtn();
+    }
     if (lastFiles) showCommand(lastFiles.base);
   });
-loadSettings().then(() => I18N.init());
+loadSettings().then(() => I18N.init().then(renderMicBtn));
+
+// Mapes selektors caur native hostu (macOS choose folder dialogs)
+document.getElementById('dirBtn').addEventListener('click', () => {
+  nativePort && nativePort.postMessage({ type: 'pick-dir' });
+});
+
+// Mikrofona slēdzis: vai ierakstā iet arī tava balss
+function renderMicBtn() {
+  els.micBtn.classList.toggle('off', !micOn);
+  els.micBtn.title = micOn ? t('micTipOn') : t('micTipOff');
+}
+els.micBtn.addEventListener('click', () => {
+  micOn = !micOn;
+  chrome.storage.local.set({ dvtMicOn: micOn });
+  renderMicBtn();
+});
 
 function buildCommand(base) {
   const claude = document.getElementById('setClaude').value;
@@ -140,8 +175,6 @@ function collectSettings() {
 }
 
 // ---------- native messaging host ----------
-// Ja hosts ir instalēts (native/install.sh), ieraksts automātiski nonāk
-// projekta mapē un transcribe.py palaižas pats; citādi failus metam Downloads.
 
 const NATIVE_HOST = 'com.dvt.recorder';
 let nativePort = null;
@@ -151,30 +184,41 @@ function connectNative() {
     nativePort = chrome.runtime.connectNative(NATIVE_HOST);
   } catch (e) {
     nativePort = null;
+    statusline(els.native, t('nativeMissing'));
     return;
   }
   nativePort.onMessage.addListener(onNativeMsg);
   nativePort.onDisconnect.addListener(() => {
     nativePort = null;
-    els.native = els.native || document.getElementById('native');
-    els.native.textContent = t('nativeMissing');
-    els.native.classList.remove('ok');
+    statusline(els.native, t('nativeMissing'));
   });
   nativePort.postMessage({ type: 'ping' });
   requestList();
 }
 
 let recPage = 0;
+let recQuery = '';
 function requestList() {
   if (nativePort)
-    nativePort.postMessage({ type: 'list', dir: collectSettings().outDir, page: recPage, pageSize: 5 });
+    nativePort.postMessage({
+      type: 'list', dir: collectSettings().outDir,
+      page: recPage, pageSize: 5, q: recQuery,
+    });
 }
 
+let searchTimer = null;
+els.search.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    recQuery = els.search.value.trim();
+    recPage = 0;
+    requestList();
+  }, 300);
+});
+
 function onNativeMsg(msg) {
-  const nativeEl = document.getElementById('native');
   if (msg.type === 'pong') {
-    nativeEl.textContent = t('nativeActive');
-    nativeEl.classList.add('ok');
+    statusline(els.native, null); // viss kārtībā -> neko nerādām
   } else if (msg.type === 'saved') {
     logLine(t('savedPrefix') + msg.path);
     setStatus(t('savedFolder'));
@@ -188,8 +232,16 @@ function onNativeMsg(msg) {
     renderRecList(msg);
   } else if (msg.type === 'title-set') {
     requestList();
+  } else if (msg.type === 'dir-picked') {
+    if (msg.dir) {
+      document.getElementById('setOutDir').value = msg.dir;
+      saveSettings();
+      requestList();
+    }
   }
 }
+
+// ---------- ierakstu saraksts (kartītes + numurēta paginācija) ----------
 
 function renderRecList(msg) {
   const el = document.getElementById('recList');
@@ -197,30 +249,28 @@ function renderRecList(msg) {
   el.classList.remove('muted');
   el.innerHTML = '';
   if (!msg.items || msg.items.length === 0) {
-    el.textContent = '— (' + msg.dir + ')';
+    el.textContent = '—';
     el.classList.add('muted');
     return;
   }
 
-  const table = document.createElement('table');
-  table.className = 'rec-table';
   for (const it of msg.items) {
-    const tr = document.createElement('tr');
+    const card = document.createElement('div');
+    card.className = 'rec-card';
 
-    const tdTitle = document.createElement('td');
-    tdTitle.className = 'rec-title';
-    tdTitle.textContent = it.title || it.base;
-    tdTitle.title = t('openEditor');
-    tdTitle.addEventListener('click', () =>
+    const pill = document.createElement('span');
+    pill.className = 'pill ' + (it.report ? 'ok' : it.transcript ? 'mid' : 'wait');
+    pill.textContent = it.report ? 'report' : it.transcript ? 'transcript' : 'audio';
+
+    const title = document.createElement('span');
+    title.className = 'rec-title';
+    title.textContent = it.title || it.base;
+    title.title = t('openEditor');
+    title.addEventListener('click', () =>
       chrome.tabs.create({ url: chrome.runtime.getURL('editor.html') + '?base=' + encodeURIComponent(it.base) }));
 
-    const tdStatus = document.createElement('td');
-    tdStatus.className = 'rec-status';
-    tdStatus.textContent = it.report ? '✓ report' : it.transcript ? '✓ transcript' : t('stAudioOnly');
-
-    const tdEdit = document.createElement('td');
-    tdEdit.className = 'rec-edit';
     const btn = document.createElement('button');
+    btn.className = 'rec-edit';
     btn.textContent = '✎';
     btn.title = t('renameTitle');
     btn.addEventListener('click', () => {
@@ -236,31 +286,25 @@ function renderRecList(msg) {
         if (e.key === 'Escape') { input.removeEventListener('blur', commit); requestList(); }
       });
       input.addEventListener('blur', commit);
-      tdTitle.textContent = '';
-      tdTitle.appendChild(input);
+      title.textContent = '';
+      title.appendChild(input);
       input.focus();
     });
-    tdEdit.appendChild(btn);
 
-    tr.append(tdTitle, tdStatus, tdEdit);
-    table.appendChild(tr);
+    card.append(pill, title, btn);
+    el.appendChild(card);
   }
-  el.appendChild(table);
 
   if (msg.pages > 1) {
     const pager = document.createElement('div');
     pager.className = 'pager';
-    const prev = document.createElement('button');
-    prev.textContent = '‹';
-    prev.disabled = msg.page === 0;
-    prev.addEventListener('click', () => { recPage = msg.page - 1; requestList(); });
-    const label = document.createElement('span');
-    label.textContent = `${msg.page + 1} / ${msg.pages}`;
-    const next = document.createElement('button');
-    next.textContent = '›';
-    next.disabled = msg.page >= msg.pages - 1;
-    next.addEventListener('click', () => { recPage = msg.page + 1; requestList(); });
-    pager.append(prev, label, next);
+    for (let p = 0; p < msg.pages; p++) {
+      const b = document.createElement('button');
+      b.textContent = String(p + 1);
+      if (p === msg.page) b.classList.add('current');
+      b.addEventListener('click', () => { recPage = p; requestList(); });
+      pager.appendChild(b);
+    }
     el.appendChild(pager);
   }
 }
@@ -286,35 +330,41 @@ async function sendToNative(files) {
   });
 }
 
+// Events bloks: paslēpts pēc noklusējuma, Rādīt/Slēpt poga
+const logToggle = document.getElementById('logToggle');
+logToggle.addEventListener('click', () => {
+  els.log.hidden = !els.log.hidden;
+  logToggle.dataset.i18n = els.log.hidden ? 'show' : 'hide';
+  logToggle.textContent = t(logToggle.dataset.i18n);
+});
+
 connectNative();
 
-// Ierakstu saraksta statusi (⏳ -> ✓) atjaunojas paši: transkripcija var ritēt
-// arī citā hosta savienojumā (piem., panelis pa vidu aizvērts/atvērts), tāpēc
-// 'done' ziņa var nepienākt — periodiska pārprasīšana to nosedz.
+// Statusu auto-atsvaidze (⏳ -> ✓), arī ja 'done' pienāk citam savienojumam.
 setInterval(requestList, 10000);
 
 // ---------- sensora ping ----------
-// content.js ielādējas agrāk par paneli, tāpēc "ready" ziņu panelis var nokavēt —
-// aktīvi pingojam Discord tabu.
+// content.js ielādējas agrāk par paneli — pingojam; kļūdas rādām, OK klusējam.
 
 async function pingSensor() {
   try {
     const tab = await findDiscordTab();
     if (!tab) {
-      els.sensor.textContent = t('sensorNoTab');
-      els.sensor.classList.remove('ok');
+      statusline(els.sensor, t('sensorNoTab'));
+      participants = [];
+      renderParticipants();
       return;
     }
     const resp = await chrome.tabs.sendMessage(tab.id, { type: 'dvt-ping' });
     if (resp && resp.type === 'dvt-pong') {
-      els.sensor.textContent = `${t('sensorActive')} (${t('diagList')}: ${resp.voiceUsers}, ${t('diagTiles')}: ${resp.tiles}${
-        resp.speakers.length ? ', ' + t('diagSpeaking') + ' ' + resp.speakers.join(', ') : ''
-      })`;
-      els.sensor.classList.add('ok');
+      statusline(els.sensor, null);
+      participants = resp.participants || [];
+      renderParticipants();
     }
   } catch (e) {
-    els.sensor.textContent = t('sensorNotLoaded');
-    els.sensor.classList.remove('ok');
+    statusline(els.sensor, t('sensorNotLoaded'));
+    participants = [];
+    renderParticipants();
   }
 }
 pingSensor();
@@ -322,8 +372,10 @@ setInterval(pingSensor, 3000);
 
 // ---------- ieraksts ----------
 
-els.startBtn.addEventListener('click', startRecording);
-els.stopBtn.addEventListener('click', stopRecording);
+els.recBtn.addEventListener('click', () => {
+  if (recorder && recorder.state === 'recording') stopRecording();
+  else startRecording();
+});
 
 async function findDiscordTab() {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -374,17 +426,19 @@ async function startRecording() {
 
     // Taba audio satur tikai PĀRĒJOS runātājus — tava balss tabā neskan,
     // tāpēc to ņemam no mikrofona un miksējam vienā celiņā.
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-    } catch (e) {
-      micStream = null;
-      logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
-      if (e.name === 'NotAllowedError') {
-        // panelī atļaujas prompt nerādās — to paņem atsevišķā paplašinājuma lapā
-        logLine(t('micPermOpening'));
-        chrome.tabs.create({ url: chrome.runtime.getURL('mic.html') });
+    micStream = null;
+    if (micOn) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch (e) {
+        logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
+        if (e.name === 'NotAllowedError') {
+          // panelī atļaujas prompt nerādās — to paņem atsevišķā paplašinājuma lapā
+          logLine(t('micPermOpening'));
+          chrome.tabs.create({ url: chrome.runtime.getURL('mic.html') });
+        }
       }
     }
 
@@ -412,8 +466,9 @@ async function startRecording() {
     }
 
     document.body.classList.add('rec');
-    els.startBtn.disabled = true;
-    els.stopBtn.disabled = false;
+    els.recBtn.dataset.i18n = 'stop';
+    els.recBtn.textContent = t('stop');
+    els.recBtn.classList.add('recording');
     setStatus(t('recRunning'));
     timerInterval = setInterval(
       () => (els.timer.textContent = fmtTime(Date.now() - t0)),
@@ -486,8 +541,9 @@ function cleanup() {
   audioCtx = null;
   recorder = null;
   document.body.classList.remove('rec');
-  els.startBtn.disabled = false;
-  els.stopBtn.disabled = true;
+  els.recBtn.dataset.i18n = 'start';
+  els.recBtn.textContent = t('start');
+  els.recBtn.classList.remove('recording');
   els.timer.textContent = '';
 }
 
@@ -531,12 +587,11 @@ function download(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 30000);
 }
 
-
 // ---------- helpers ----------
 
 function setStatus(text, isErr) {
   els.status.textContent = text;
-  els.status.style.color = isErr ? '#f23f43' : '';
+  els.status.style.color = isErr ? 'var(--danger)' : '';
 }
 
 function fmtTime(ms) {

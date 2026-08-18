@@ -2,6 +2,7 @@
 // Valodu izvēlas iestatījumos (setUiLang); noklusēti — pārlūka valoda.
 const DVT_STRINGS = {
   en: {
+    searchPh: 'search by call id, title, or content', micTipOn: 'Microphone ON — your voice will be recorded', micTipOff: 'Microphone OFF — your voice will NOT be recorded', show: 'Show', hide: 'Hide',
     renameTitle: 'Rename', titlePh: 'Title…',
     start: '● Start recording', stop: '■ Stop & save', statusIdle: 'Not recording',
     nowSpeaking: 'Now speaking', events: 'Events', cmdTitle: 'Transcription command',
@@ -42,6 +43,7 @@ const DVT_STRINGS = {
     edSave: 'Save', edCancel: 'Cancel',
   },
   lv: {
+    searchPh: 'meklē pēc ID, nosaukuma vai satura', micTipOn: 'Mikrofons IESLĒGTS — tava balss tiks ierakstīta', micTipOff: 'Mikrofons IZSLĒGTS — tava balss NETIKS ierakstīta', show: 'Rādīt', hide: 'Slēpt',
     renameTitle: 'Pārsaukt', titlePh: 'Nosaukums…',
     start: '● Sākt ierakstu', stop: '■ Beigt un saglabāt', statusIdle: 'Nav ieraksta',
     nowSpeaking: 'Šobrīd runā', events: 'Notikumi', cmdTitle: 'Transkripcijas komanda',
@@ -82,6 +84,7 @@ const DVT_STRINGS = {
     edSave: 'Saglabāt', edCancel: 'Atcelt',
   },
   ru: {
+    searchPh: 'поиск по ID, названию или содержимому', micTipOn: 'Микрофон ВКЛ — ваш голос будет записан', micTipOff: 'Микрофон ВЫКЛ — ваш голос НЕ будет записан', show: 'Показать', hide: 'Скрыть',
     renameTitle: 'Переименовать', titlePh: 'Название…',
     start: '● Начать запись', stop: '■ Остановить и сохранить', statusIdle: 'Запись не идёт',
     nowSpeaking: 'Сейчас говорят', events: 'События', cmdTitle: 'Команда транскрипции',
@@ -122,6 +125,7 @@ const DVT_STRINGS = {
     edSave: 'Сохранить', edCancel: 'Отмена',
   },
   de: {
+    searchPh: 'Suche nach ID, Titel oder Inhalt', micTipOn: 'Mikrofon AN — deine Stimme wird aufgenommen', micTipOff: 'Mikrofon AUS — deine Stimme wird NICHT aufgenommen', show: 'Anzeigen', hide: 'Ausblenden',
     renameTitle: 'Umbenennen', titlePh: 'Titel…',
     start: '● Aufnahme starten', stop: '■ Stoppen & speichern', statusIdle: 'Keine Aufnahme',
     nowSpeaking: 'Spricht gerade', events: 'Ereignisse', cmdTitle: 'Transkriptionsbefehl',
@@ -162,6 +166,7 @@ const DVT_STRINGS = {
     edSave: 'Speichern', edCancel: 'Abbrechen',
   },
   zh: {
+    searchPh: '按 ID、标题或内容搜索', micTipOn: '麦克风已开——将录制你的声音', micTipOff: '麦克风已关——不会录制你的声音', show: '显示', hide: '隐藏',
     renameTitle: '重命名', titlePh: '标题…',
     start: '● 开始录音', stop: '■ 停止并保存', statusIdle: '未在录音',
     nowSpeaking: '正在讲话', events: '事件', cmdTitle: '转录命令',

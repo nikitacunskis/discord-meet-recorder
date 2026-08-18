@@ -8,9 +8,9 @@
 <body>
   <h1>Discord Call Recorder</h1>
 
-  <div class="row">
-    <button id="startBtn" data-i18n="start">● Sākt ierakstu</button>
-    <button id="stopBtn" data-i18n="stop" disabled>■ Beigt un saglabāt</button>
+  <div class="rec-controls">
+    <button id="recBtn" data-i18n="start">● Sākt ierakstu</button>
+    <button id="micBtn" title="">🎤</button>
   </div>
 
   <div class="row">
@@ -18,22 +18,11 @@
     <span id="timer"></span>
   </div>
 
-  <div id="sensor" class="row muted" data-i18n="sensorWait">DOM sensors: gaidu Discord tabu…</div>
-  <div id="native" class="row muted" data-i18n="nativeChecking">Native host: pārbaudu…</div>
+  <div id="sensor" class="statusline muted" data-i18n="sensorWait">DOM sensors: gaidu Discord tabu…</div>
+  <div id="native" class="statusline muted" data-i18n="nativeChecking">Native host: pārbaudu…</div>
 
   <h2 data-i18n="nowSpeaking">Šobrīd runā</h2>
-  <div id="nowSpeaking" class="chips muted">—</div>
-
-  <details id="logDetails">
-    <summary data-i18n="events">Notikumi</summary>
-    <div id="log"></div>
-  </details>
-
-  <div id="cmdBlock" hidden>
-    <h2 data-i18n="cmdTitle">Transkripcijas komanda</h2>
-    <pre id="cmd"></pre>
-    <button id="copyCmd" data-i18n="copyCmd">Kopēt komandu</button>
-  </div>
+  <div id="nowSpeaking" class="chips-grid muted">—</div>
 
   <h2 data-i18n="settings">Iestatījumi</h2>
   <div class="settings">
@@ -61,21 +50,42 @@
         <option value="en" data-i18n="langEn">angļu</option>
       </select>
     </label>
-    <label class="check">
-      <input type="checkbox" id="setReport" checked />
-      <span data-i18n="report">Claude atskaite (--report)</span>
-    </label>
-    <label class="check">
-      <input type="checkbox" id="setAuto" checked />
-      <span data-i18n="autoTrans">Auto-transkripcija pēc ieraksta (native host)</span>
-    </label>
+    <div class="toggles">
+      <label class="check">
+        <input type="checkbox" id="setAuto" checked />
+        <span data-i18n="autoTrans">Auto-transkripcija pēc ieraksta (native host)</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="setReport" checked />
+        <span data-i18n="report">Claude atskaite (--report)</span>
+      </label>
+    </div>
     <label><span data-i18n="outDir">Izvades mape</span>
-      <input type="text" id="setOutDir" data-i18n-ph="outDirPh" placeholder="(noklusēti: projekta recordings/)" />
+      <span class="dir-wrap">
+        <input type="text" id="setOutDir" readonly data-i18n-ph="outDirPh" placeholder="(noklusēti: projekta recordings/)" />
+        <button id="dirBtn" type="button" title="…">📁</button>
+      </span>
     </label>
   </div>
 
   <h2 data-i18n="recordings">Ieraksti</h2>
+  <div class="search-wrap">
+    <input type="search" id="recSearch" data-i18n-ph="searchPh" placeholder="meklē pēc ID, nosaukuma vai satura" />
+    <span class="search-icon">🔍</span>
+  </div>
   <div id="recList" class="muted">—</div>
+
+  <div class="events-head">
+    <h2 data-i18n="events">Notikumi</h2>
+    <button id="logToggle" data-i18n="show">Rādīt</button>
+  </div>
+  <div id="log" class="console" hidden></div>
+
+  <div id="cmdBlock" hidden>
+    <h2 data-i18n="cmdTitle">Transkripcijas komanda</h2>
+    <pre id="cmd"></pre>
+    <button id="copyCmd" data-i18n="copyCmd">Kopēt komandu</button>
+  </div>
 
   <script src="i18n.js"></script>
   <script src="panel.js"></script>

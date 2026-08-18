@@ -104,12 +104,34 @@
   // runātāju intervāliem ir vairāk nekā pietiekama.
   setInterval(sweep, 250);
 
+  // Visi balss kanāla dalībnieki (ne tikai runājošie) — paneļa režģim.
+  function currentParticipants() {
+    const seen = new Map();
+    for (const vu of document.querySelectorAll('[class*="voiceUser"]')) {
+      const nameEl = vu.querySelector('[class*="username"]');
+      const name = nameEl && (nameEl.textContent || '').trim();
+      if (name) seen.set(userIdFrom(vu) || name, name);
+    }
+    for (const tile of document.querySelectorAll('[data-selenium-video-tile]')) {
+      const ft = tile.querySelector('[class*="focusTarget"][aria-label]');
+      let name = '';
+      if (ft) {
+        const label = ft.getAttribute('aria-label') || '';
+        const m = label.match(/^[^,]*,\s*(.+)$/);
+        name = (m ? m[1] : label).trim();
+      }
+      if (name) seen.set(tile.getAttribute('data-selenium-video-tile') || name, name);
+    }
+    return [...seen.values()];
+  }
+
   // Panelis pingo, lai zinātu, ka sensors dzīvs.
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === 'dvt-ping') {
       sendResponse({
         type: 'dvt-pong',
         speakers: [...currentSpeakers().values()].map((s) => s.name),
+        participants: currentParticipants(),
         voiceUsers: document.querySelectorAll('[class*="voiceUser"]').length,
         tiles: document.querySelectorAll('[data-selenium-video-tile]').length,
       });
