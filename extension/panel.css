@@ -24,6 +24,12 @@ button:disabled { opacity: 0.4; cursor: default; }
   background: #23a55a; color: #fff; border-radius: 10px;
   padding: 2px 10px; font-size: 12px;
 }
+details#logDetails summary {
+  font-size: 12px; text-transform: uppercase; color: #949ba4;
+  margin: 14px 0 6px; cursor: pointer; list-style: none;
+}
+details#logDetails summary::before { content: '▸ '; }
+details#logDetails[open] summary::before { content: '▾ '; }
 #log {
   max-height: 45vh; overflow-y: auto; font-size: 12px;
   border-top: 1px solid #3f4147;
