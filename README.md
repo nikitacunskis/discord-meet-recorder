@@ -40,13 +40,13 @@ ChatGPT/Claude čats augšupielādētu audio pats netranskribē, tāpēc STT not
 brew install ffmpeg whisper-cpp
 
 # transkripcija + runātāju atribūcija (modelis lejupielādējas pats pirmajā reizē)
-python3 tools/transcribe.py ~/Downloads/discord-call-<datums>.webm --model small
+python3 tools/transcribe.py ~/Downloads/discord-call-<datums>.webm
 ```
 
 Rezultāts: `discord-call-<datums>.transcript.md` ar rindām `[HH:MM:SS] vārds: teksts`.
 To iemet ChatGPT/Claude kopsavilkumam un action items (`.prompt.txt` vairs nav obligāts — tas domāts gadījumam, ja audio apstrādā pats čats).
 
-Kvalitāte pret ātrumu: `--model small` (noklusēts, ~470 MB) → `medium` (~1.5 GB) → `large-v3` (~3 GB, labākais jauktai LV/EN/RU runai). Ja zvans pārsvarā vienā valodā, pievieno `--language ru` / `lv` / `en` — mazāk halucināciju.
+Modelis: `large-v3-turbo` (vienīgā opcija, ~1.6 GB, lejupielādējas pats pirmajā reizē). Ja zvans pārsvarā vienā valodā, pievieno `--language ru` / `lv` / `en` — mazāk halucināciju.
 
 ## Zināmie ierobežojumi
 
@@ -58,14 +58,11 @@ Kvalitāte pret ātrumu: `--model small` (noklusēts, ~470 MB) → `medium` (~1.
 ## Struktūra
 
 ```
-extension/
-├── manifest.json    MV3, atļaujas: tabCapture, sidePanel, tabs
-├── background.js    ikona → sānu panelis
-├── content.js       MutationObserver uz [class*="usernameSpeaking"] → runātāju notikumi
-├── panel.js         tabCapture + MediaRecorder + intervālu būve + eksports
-├── panel.html/css   UI
-RESEARCH.md          izpētes piezīmes (DOM pierādījumi, alternatīvas)
-PROMPT.md            gatavs prompts transkripcijai ar atribūciju
-is_voice.html /      reāli DOM paraugi, pret kuriem verificēti selektori
-no_voice.html
+extension/           Chrome MV3 paplašinājums (panelis, sensors, redaktors)
+native/              native messaging hosts + install.sh
+tools/transcribe.py  whisper.cpp pipeline: bloki, atribūcija, SQLite, Claude atskaite
+tools/dvtdb.py       vienotā SQLite shēma (recordings, text_lines)
+recordings/          katram ierakstam sava mape + dvt.sqlite (gitignore)
+models/              whisper modeļi (gitignore, lejupielādējas paši)
+RESEARCH.md          izpētes piezīmes (DOM selektoru pierādījumi)
 ```
