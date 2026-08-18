@@ -13,3 +13,6 @@ __pycache__/
 
 # ieraksti un DB — personiski dati, ne kods
 recordings/
+
+# izpētes piezīmes — lokālas, ne repo
+RESEARCH.md
