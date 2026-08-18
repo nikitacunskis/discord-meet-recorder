@@ -156,6 +156,8 @@ def main() -> None:
                     help="claude CLI binārijs --report solim: claude | claude-personal | claude-rgp | pilns ceļš")
     ap.add_argument("--report-lang", default="en",
                     help="report language code (matches the panel UI language)")
+    ap.add_argument("--report-only", action="store_true",
+                    help="skip transcription; only (re)generate the report from the existing transcript")
     ap.add_argument("--report", action="store_true",
                     help="pēc transkripcijas izlaist caur Claude (claude -p): "
                          "kļūdu labošana + kopsavilkums + action items")
@@ -174,6 +176,14 @@ def process(audio_arg: Path, args) -> None:
         print(f"Izlaižu {audio.name}: nav {speakers_file.name}")
         return
     print(f"\n=== {audio.name} ===")
+
+    if args.report_only:
+        out_file = Path(str(base) + ".transcript.md")
+        if not out_file.exists():
+            print(f"Izlaižu {audio.name}: nav {out_file.name}")
+            return
+        generate_report(base, out_file, args)
+        return
 
     data = json.loads(speakers_file.read_text())
     raw = data["intervals"]
@@ -243,6 +253,12 @@ def process(audio_arg: Path, args) -> None:
     print("\n".join(lines))
 
     if args.report:
+        generate_report(base, out_file, args)
+
+def generate_report(base: Path, out_file: Path, args) -> None:
+    """Ask claude -p for strict-JSON meeting minutes and store them in
+    record_reports. Claude only returns text; all DB writes happen here."""
+    if True:
         lang_name = REPORT_LANGS.get(args.report_lang, "English")
         print(f"\nGenerating report via {args.claude} -p ({lang_name}) …")
         prompt = (
@@ -266,11 +282,18 @@ def process(audio_arg: Path, args) -> None:
         resolved = shutil.which(cmd[0])
         if resolved:
             cmd[0] = resolved
-        r = subprocess.run(cmd, input=prompt,
-                           capture_output=True, text=True, env=env)
+        try:
+            r = subprocess.run(cmd, input=prompt, capture_output=True,
+                               text=True, env=env, timeout=900)
+        except subprocess.TimeoutExpired:
+            print("claude -p timed out after 900s — report skipped, "
+                  "re-run with --report-only")
+            return
         if r.returncode != 0:
-            sys.exit(f"claude -p failed (rc={r.returncode}):\n"
-                     f"stderr: {r.stderr[-1000:]}\nstdout: {r.stdout[-1000:]}")
+            print(f"claude -p failed (rc={r.returncode}) — report skipped, "
+                  f"re-run with --report-only\n"
+                  f"stderr: {r.stderr[-800:]}\nstdout: {r.stdout[-800:]}")
+            return
         raw = r.stdout.strip()
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
         try:
