@@ -71,19 +71,27 @@ def run_transcribe(audio: Path, settings: dict) -> None:
         send({"type": "done", "code": 1, "base": audio.stem})
 
 
-def list_recordings(dirpath: Path) -> list[dict]:
+def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5) -> dict:
     items = []
     if dirpath.exists():
         # jaunais izkārtojums: <dir>/<base>/<base>.webm; vecais: <dir>/<base>.webm
         found = list(dirpath.glob("*/*.webm")) + list(dirpath.glob("*.webm"))
-        for f in sorted(found, key=lambda p: p.stem, reverse=True)[:20]:
+        db = dvtdb.connect()
+        title_map = dvtdb.titles(db)
+        db.close()
+        for f in sorted(found, key=lambda p: p.stem, reverse=True):
             b = str(f.with_suffix(""))
             items.append({
                 "base": f.stem,
+                "title": title_map.get(f.stem),
                 "transcript": Path(b + ".transcript.md").exists(),
                 "report": Path(b + ".report.md").exists(),
             })
-    return items
+    total = len(items)
+    pages = max(1, -(-total // page_size))
+    page = max(0, min(page, pages - 1))
+    return {"items": items[page * page_size:(page + 1) * page_size],
+            "page": page, "pages": pages, "total": total}
 
 
 def find_audio(base: str, base_dir: Path) -> Path | None:
@@ -131,6 +139,7 @@ def handle_load(msg, base_dir: Path) -> None:
     lines = dvtdb.get_lines(db, rec_id) if rec_id is not None else []
     rec = dvtdb.get_recording(db, base)
     send({"type": "recording", "base": base,
+          "title": rec["title"] if rec else None,
           "start_dt": rec["start_dt"] if rec else None,
           "end_dt": rec["end_dt"] if rec else None,
           "lines": lines})
@@ -179,7 +188,18 @@ def main() -> None:
             send({"type": "deleted", "id": msg["id"]})
         elif t == "list":
             d = Path(msg.get("dir") or base_dir).expanduser()
-            send({"type": "list", "items": list_recordings(d), "dir": str(d)})
+            res = list_recordings(d, int(msg.get("page") or 0),
+                                  int(msg.get("pageSize") or 5))
+            res.update({"type": "list", "dir": str(d)})
+            send(res)
+        elif t == "set-title":
+            db = dvtdb.connect()
+            audio = find_audio(msg["base"], base_dir)
+            dvtdb.set_title(db, msg["base"], (msg.get("title") or "").strip(),
+                            str(audio.parent) if audio else None)
+            db.close()
+            send({"type": "title-set", "base": msg["base"],
+                  "title": (msg.get("title") or "").strip() or None})
         elif t == "begin":
             settings = msg.get("settings") or {}
             base_dir = Path(settings.get("outDir") or DEFAULT_DIR).expanduser()

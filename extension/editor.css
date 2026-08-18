@@ -1,41 +1,71 @@
+/* Tēma seko pārlūkam: gaišās vērtības :root, tumšās @media blokā. */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #ececf0;
+  --text: #222222;
+  --muted: #6b7280;
+  --border: #bbbbbb;
+  --border-soft: #dddddd;
+  --accent: #23a55a;
+  --accent-soft: rgba(35, 165, 90, 0.25);
+  --danger: #c33333;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1f22;
+    --surface: #2b2d31;
+    --surface-2: #232428;
+    --text: #dbdee1;
+    --muted: #949ba4;
+    --border: #4a4d55;
+    --border-soft: #3f4147;
+    --accent: #23a55a;
+    --accent-soft: rgba(35, 165, 90, 0.35);
+    --danger: #f23f43;
+  }
+}
+
 * { box-sizing: border-box; }
 body {
   font: 15px/1.5 -apple-system, system-ui, sans-serif;
-  background: #f4f5f7; color: #222;
+  background: var(--bg); color: var(--text);
   margin: 0; display: flex; flex-direction: column; height: 100vh;
 }
 header {
   display: flex; align-items: baseline; gap: 16px;
-  padding: 10px 20px; background: #fff; border-bottom: 1px solid #ddd;
+  padding: 10px 20px; background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
 }
 h1 { font-size: 16px; margin: 0; }
-.muted { color: #888; font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
 
 main#list { flex: 1; overflow-y: auto; padding: 16px 20px; }
 
 .row {
   display: flex; gap: 14px; align-items: baseline;
-  background: #fff; border: 1px solid #bbb; border-radius: 3px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
   padding: 8px 14px; margin-bottom: 10px; cursor: pointer;
   max-width: 1200px;
 }
-.row:hover { border-color: #666; }
-.row.playing { border-color: #23a55a; box-shadow: 0 0 0 2px rgba(35,165,90,.25); }
+.row:hover { border-color: var(--muted); }
+.row.playing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .row.interrupt { margin-left: 22%; max-width: 950px; }
 .row .speaker { font-weight: 700; white-space: nowrap; min-width: 120px; }
-.row .time { color: #777; white-space: nowrap; font-size: 13px; }
+.row .time { color: var(--muted); white-space: nowrap; font-size: 13px; }
 .row .text { font-style: italic; flex: 1; }
 .row .tools { visibility: hidden; white-space: nowrap; }
 .row:hover .tools { visibility: visible; }
 .tools button {
-  border: 0; background: none; cursor: pointer; font-size: 14px; color: #666;
+  border: 0; background: none; cursor: pointer; font-size: 14px; color: var(--muted);
 }
-.tools button:hover { color: #000; }
-.tools button.danger { color: #c33; }
+.tools button:hover { color: var(--text); }
+.tools button.danger { color: var(--danger); }
 
 .row.editing { flex-wrap: wrap; cursor: default; }
 .row.editing input, .row.editing textarea {
-  font: inherit; border: 1px solid #aaa; border-radius: 3px; padding: 3px 6px;
+  font: inherit; border: 1px solid var(--border); border-radius: 3px; padding: 3px 6px;
+  background: var(--surface); color: var(--text);
 }
 .row.editing input.speaker-in { width: 160px; }
 .row.editing input.time-in { width: 110px; }
@@ -44,17 +74,18 @@ main#list { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .row.editing .actions button {
   border: 0; border-radius: 3px; padding: 6px 14px; cursor: pointer;
 }
-.row.editing .save { background: #23a55a; color: #fff; }
-.row.editing .cancel { background: #ddd; }
+.row.editing .save { background: var(--accent); color: #fff; }
+.row.editing .cancel { background: var(--surface-2); color: var(--text); }
 
 footer#player {
   display: flex; align-items: center; gap: 16px;
-  background: #fff; border-top: 1px solid #ccc; padding: 18px 24px;
+  background: var(--surface); border-top: 1px solid var(--border-soft);
+  padding: 18px 24px;
 }
 #playBtn {
-  font-size: 22px; width: 52px; height: 52px; border: 1px solid #333;
-  border-radius: 6px; background: #fff; cursor: pointer;
+  font-size: 22px; width: 52px; height: 52px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer;
 }
-#playBtn:hover { background: #eee; }
-#seek { flex: 1; accent-color: #222; height: 6px; }
-#clock { font-variant-numeric: tabular-nums; color: #444; font-size: 14px; }
+#playBtn:hover { background: var(--surface-2); }
+#seek { flex: 1; accent-color: var(--text); height: 6px; }
+#clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }

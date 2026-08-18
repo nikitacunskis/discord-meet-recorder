@@ -161,7 +161,13 @@ function connectNative() {
     els.native.classList.remove('ok');
   });
   nativePort.postMessage({ type: 'ping' });
-  nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
+  requestList();
+}
+
+let recPage = 0;
+function requestList() {
+  if (nativePort)
+    nativePort.postMessage({ type: 'list', dir: collectSettings().outDir, page: recPage, pageSize: 5 });
 }
 
 function onNativeMsg(msg) {
@@ -172,34 +178,90 @@ function onNativeMsg(msg) {
   } else if (msg.type === 'saved') {
     logLine(t('savedPrefix') + msg.path);
     setStatus(t('savedFolder'));
-    nativePort && nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
+    requestList();
   } else if (msg.type === 'log') {
     logLine(msg.line);
   } else if (msg.type === 'done') {
     setStatus(msg.code === 0 ? t('transDone') + msg.base : t('transFail'));
-    nativePort && nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
+    requestList();
   } else if (msg.type === 'list') {
-    renderRecList(msg.items, msg.dir);
+    renderRecList(msg);
+  } else if (msg.type === 'title-set') {
+    requestList();
   }
 }
 
-function renderRecList(items, dir) {
+function renderRecList(msg) {
   const el = document.getElementById('recList');
-  if (!items || items.length === 0) {
-    el.textContent = '— (' + dir + ')';
-    return;
-  }
+  recPage = msg.page;
   el.classList.remove('muted');
   el.innerHTML = '';
-  el.title = dir;
-  for (const it of items) {
-    const div = document.createElement('div');
-    div.textContent = `${it.base}  ${it.report ? '✓ report' : it.transcript ? '✓ transcript' : t('stAudioOnly')}`;
-    div.style.cursor = 'pointer';
-    div.title = t('openEditor');
-    div.addEventListener('click', () =>
+  if (!msg.items || msg.items.length === 0) {
+    el.textContent = '— (' + msg.dir + ')';
+    el.classList.add('muted');
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'rec-table';
+  for (const it of msg.items) {
+    const tr = document.createElement('tr');
+
+    const tdTitle = document.createElement('td');
+    tdTitle.className = 'rec-title';
+    tdTitle.textContent = it.title || it.base;
+    tdTitle.title = t('openEditor');
+    tdTitle.addEventListener('click', () =>
       chrome.tabs.create({ url: chrome.runtime.getURL('editor.html') + '?base=' + encodeURIComponent(it.base) }));
-    el.appendChild(div);
+
+    const tdStatus = document.createElement('td');
+    tdStatus.className = 'rec-status';
+    tdStatus.textContent = it.report ? '✓ report' : it.transcript ? '✓ transcript' : t('stAudioOnly');
+
+    const tdEdit = document.createElement('td');
+    tdEdit.className = 'rec-edit';
+    const btn = document.createElement('button');
+    btn.textContent = '✎';
+    btn.title = t('renameTitle');
+    btn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = it.title || '';
+      input.placeholder = t('titlePh');
+      const commit = () => {
+        nativePort && nativePort.postMessage({ type: 'set-title', base: it.base, title: input.value });
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') { input.removeEventListener('blur', commit); requestList(); }
+      });
+      input.addEventListener('blur', commit);
+      tdTitle.textContent = '';
+      tdTitle.appendChild(input);
+      input.focus();
+    });
+    tdEdit.appendChild(btn);
+
+    tr.append(tdTitle, tdStatus, tdEdit);
+    table.appendChild(tr);
+  }
+  el.appendChild(table);
+
+  if (msg.pages > 1) {
+    const pager = document.createElement('div');
+    pager.className = 'pager';
+    const prev = document.createElement('button');
+    prev.textContent = '‹';
+    prev.disabled = msg.page === 0;
+    prev.addEventListener('click', () => { recPage = msg.page - 1; requestList(); });
+    const label = document.createElement('span');
+    label.textContent = `${msg.page + 1} / ${msg.pages}`;
+    const next = document.createElement('button');
+    next.textContent = '›';
+    next.disabled = msg.page >= msg.pages - 1;
+    next.addEventListener('click', () => { recPage = msg.page + 1; requestList(); });
+    pager.append(prev, label, next);
+    el.appendChild(pager);
   }
 }
 
@@ -229,9 +291,7 @@ connectNative();
 // Ierakstu saraksta statusi (⏳ -> ✓) atjaunojas paši: transkripcija var ritēt
 // arī citā hosta savienojumā (piem., panelis pa vidu aizvērts/atvērts), tāpēc
 // 'done' ziņa var nepienākt — periodiska pārprasīšana to nosedz.
-setInterval(() => {
-  if (nativePort) nativePort.postMessage({ type: 'list', dir: collectSettings().outDir });
-}, 10000);
+setInterval(requestList, 10000);
 
 // ---------- sensora ping ----------
 // content.js ielādējas agrāk par paneli, tāpēc "ready" ziņu panelis var nokavēt —

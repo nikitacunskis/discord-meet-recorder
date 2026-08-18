@@ -2,6 +2,7 @@
 // Valodu izvēlas iestatījumos (setUiLang); noklusēti — pārlūka valoda.
 const DVT_STRINGS = {
   en: {
+    renameTitle: 'Rename', titlePh: 'Title…',
     start: '● Start recording', stop: '■ Stop & save', statusIdle: 'Not recording',
     nowSpeaking: 'Now speaking', events: 'Events', cmdTitle: 'Transcription command',
     copyCmd: 'Copy command', copied: 'Command copied — paste it in the terminal.',
@@ -41,6 +42,7 @@ const DVT_STRINGS = {
     edSave: 'Save', edCancel: 'Cancel',
   },
   lv: {
+    renameTitle: 'Pārsaukt', titlePh: 'Nosaukums…',
     start: '● Sākt ierakstu', stop: '■ Beigt un saglabāt', statusIdle: 'Nav ieraksta',
     nowSpeaking: 'Šobrīd runā', events: 'Notikumi', cmdTitle: 'Transkripcijas komanda',
     copyCmd: 'Kopēt komandu', copied: 'Komanda nokopēta — ielīmē terminālī.',
@@ -80,6 +82,7 @@ const DVT_STRINGS = {
     edSave: 'Saglabāt', edCancel: 'Atcelt',
   },
   ru: {
+    renameTitle: 'Переименовать', titlePh: 'Название…',
     start: '● Начать запись', stop: '■ Остановить и сохранить', statusIdle: 'Запись не идёт',
     nowSpeaking: 'Сейчас говорят', events: 'События', cmdTitle: 'Команда транскрипции',
     copyCmd: 'Скопировать команду', copied: 'Команда скопирована — вставьте в терминал.',
@@ -119,6 +122,7 @@ const DVT_STRINGS = {
     edSave: 'Сохранить', edCancel: 'Отмена',
   },
   de: {
+    renameTitle: 'Umbenennen', titlePh: 'Titel…',
     start: '● Aufnahme starten', stop: '■ Stoppen & speichern', statusIdle: 'Keine Aufnahme',
     nowSpeaking: 'Spricht gerade', events: 'Ereignisse', cmdTitle: 'Transkriptionsbefehl',
     copyCmd: 'Befehl kopieren', copied: 'Befehl kopiert — im Terminal einfügen.',
@@ -158,6 +162,7 @@ const DVT_STRINGS = {
     edSave: 'Speichern', edCancel: 'Abbrechen',
   },
   zh: {
+    renameTitle: '重命名', titlePh: '标题…',
     start: '● 开始录音', stop: '■ 停止并保存', statusIdle: '未在录音',
     nowSpeaking: '正在讲话', events: '事件', cmdTitle: '转录命令',
     copyCmd: '复制命令', copied: '命令已复制——请粘贴到终端。',

@@ -70,7 +70,26 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db.execute("PRAGMA foreign_keys = ON")
     _create(db)
     _migrate_legacy(db)
+    cols = {r["name"] for r in db.execute("PRAGMA table_info(recordings)")}
+    if "title" not in cols:
+        db.execute("ALTER TABLE recordings ADD COLUMN title TEXT")
+        db.commit()
     return db
+
+
+def set_title(db, base: str, title: str, rec_dir: str | None = None) -> None:
+    """Lietotāja dotais nosaukums. `base` (ID) paliek nemainīgs — tikai BE."""
+    if db.execute("SELECT 1 FROM recordings WHERE base=?", (base,)).fetchone() is None:
+        db.execute("INSERT INTO recordings(base, dir, title) VALUES(?,?,?)",
+                   (base, rec_dir or "", title or None))
+    else:
+        db.execute("UPDATE recordings SET title=? WHERE base=?", (title or None, base))
+    db.commit()
+
+
+def titles(db) -> dict:
+    return {r["base"]: r["title"] for r in db.execute(
+        "SELECT base, title FROM recordings WHERE title IS NOT NULL")}
 
 
 def upsert_recording(db, base: str, rec_dir: str, start_dt: str | None,

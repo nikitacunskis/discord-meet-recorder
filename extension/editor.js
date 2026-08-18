@@ -41,6 +41,11 @@ port.onDisconnect.addListener(() => {
 });
 port.onMessage.addListener((msg) => {
   if (msg.type === 'recording') {
+    if (msg.title) {
+      els.title.textContent = msg.title;
+      els.title.title = msg.base; // ID paliek BE — redzams tikai tooltip
+      document.title = msg.title;
+    }
     utts = msg.lines;
     knownDurMs = utts.reduce((m, u) => Math.max(m, u.end_dt_ms), 0);
     render();
