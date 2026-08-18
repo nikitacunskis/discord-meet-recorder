@@ -159,8 +159,11 @@ def main() -> None:
     ap.add_argument("--report-only", action="store_true",
                     help="skip transcription; only (re)generate the report from the existing transcript")
     ap.add_argument("--report", action="store_true",
-                    help="pēc transkripcijas izlaist caur Claude (claude -p): "
-                         "kļūdu labošana + kopsavilkums + action items")
+                    help="generate the Summary section via claude -p")
+    ap.add_argument("--decisions", action="store_true",
+                    help="generate the Decisions section via claude -p")
+    ap.add_argument("--actions", action="store_true",
+                    help="generate the Action items section via claude -p")
     args = ap.parse_args()
 
     for one in args.audio:
@@ -252,63 +255,81 @@ def process(audio_arg: Path, args) -> None:
     print(f"Gatavs: {out_file}\n")
     print("\n".join(lines))
 
-    if args.report:
+    if args.report or args.decisions or args.actions:
         generate_report(base, out_file, args)
 
 def generate_report(base: Path, out_file: Path, args) -> None:
-    """Ask claude -p for strict-JSON meeting minutes and store them in
-    record_reports. Claude only returns text; all DB writes happen here."""
-    if True:
-        lang_name = REPORT_LANGS.get(args.report_lang, "English")
-        print(f"\nGenerating report via {args.claude} -p ({lang_name}) …")
-        prompt = (
-            "You are given an automatic Whisper transcript of a Discord call "
-            "with speaker attribution from timestamps. Speech may freely mix "
-            "several languages within one sentence.\n\n"
-            f"Produce a meeting report written in {lang_name}. Output STRICT "
-            "JSON only — no markdown, no code fences, no extra keys — with "
-            "exactly this shape:\n"
-            '{"summary": "...", "decisions": ["..."], "action_items": ["..."]}\n'
-            "Empty arrays are allowed when the call contains no decisions or "
-            "action items. Do not invent content that is not in the transcript.\n\n"
-            "Transcript:\n\n" + out_file.read_text()
-        )
-        env = os.environ.copy()
-        cmd = [args.claude, "-p"]
-        m = re.fullmatch(r"claude-([\w.-]+)", args.claude)
-        if m:
-            env["CLAUDE_CONFIG_DIR"] = str(Path.home() / f".claude-{m.group(1)}")
-            cmd = ["claude", "-p"]
-        resolved = shutil.which(cmd[0])
-        if resolved:
-            cmd[0] = resolved
-        try:
-            r = subprocess.run(cmd, input=prompt, capture_output=True,
-                               text=True, env=env, timeout=900)
-        except subprocess.TimeoutExpired:
-            print("claude -p timed out after 900s — report skipped, "
-                  "re-run with --report-only")
-            return
-        if r.returncode != 0:
-            print(f"claude -p failed (rc={r.returncode}) — report skipped, "
-                  f"re-run with --report-only\n"
-                  f"stderr: {r.stderr[-800:]}\nstdout: {r.stdout[-800:]}")
-            return
-        raw = r.stdout.strip()
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
-        try:
-            rep = json.loads(raw)
-            summary = str(rep.get("summary", ""))
-            decisions = [str(x) for x in rep.get("decisions", [])]
-            action_items = [str(x) for x in rep.get("action_items", [])]
-        except (json.JSONDecodeError, AttributeError):
-            summary, decisions, action_items = raw, [], []
-        db = dvtdb.connect()
-        rec = dvtdb.get_recording(db, base.name)
-        dvtdb.set_report(db, rec["id"], summary, decisions, action_items)
-        db.close()
-        print(f"Report stored in record_reports ({lang_name}): "
-              f"{len(decisions)} decisions, {len(action_items)} action items")
+    """Ask claude -p for the requested report sections as strict JSON and
+    store them in record_reports. Claude only returns text; all DB writes
+    happen here. Sections that come back empty are not written; sections
+    that were not requested keep their existing DB values.
+    """
+    wanted = []
+    if args.report:
+        wanted.append(("summary", '"summary": "..."'))
+    if args.decisions:
+        wanted.append(("decisions", '"decisions": ["..."]'))
+    if args.actions:
+        wanted.append(("action_items", '"action_items": ["..."]'))
+    if not wanted:
+        return
+    lang_name = REPORT_LANGS.get(args.report_lang, "English")
+    keys = ", ".join(k for k, _ in wanted)
+    shape = "{" + ", ".join(s for _, s in wanted) + "}"
+    print(f"\nGenerating report sections [{keys}] via {args.claude} -p ({lang_name}) …")
+    prompt = (
+        "You are given an automatic Whisper transcript of a Discord call "
+        "with speaker attribution from timestamps. Speech may freely mix "
+        "several languages within one sentence.\n\n"
+        f"Produce meeting minutes written in {lang_name}. Output STRICT "
+        "JSON only — no markdown, no code fences — with exactly this shape:\n"
+        f"{shape}\n"
+        "Empty strings/arrays are allowed when the call has no such content. "
+        "Do not invent content that is not in the transcript.\n\n"
+        "Transcript:\n\n" + out_file.read_text()
+    )
+    env = os.environ.copy()
+    cmd = [args.claude, "-p"]
+    m = re.fullmatch(r"claude-([\w.-]+)", args.claude)
+    if m:
+        env["CLAUDE_CONFIG_DIR"] = str(Path.home() / f".claude-{m.group(1)}")
+        cmd = ["claude", "-p"]
+    resolved = shutil.which(cmd[0])
+    if resolved:
+        cmd[0] = resolved
+    try:
+        r = subprocess.run(cmd, input=prompt, capture_output=True,
+                           text=True, env=env, timeout=900)
+    except subprocess.TimeoutExpired:
+        print("claude -p timed out after 900s — report skipped, re-run with --report-only")
+        return
+    if r.returncode != 0:
+        print(f"claude -p failed (rc={r.returncode}) — report skipped, "
+              f"re-run with --report-only\n"
+              f"stderr: {r.stderr[-800:]}\nstdout: {r.stdout[-800:]}")
+        return
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", r.stdout.strip())
+    try:
+        rep = json.loads(raw)
+    except json.JSONDecodeError:
+        print("claude -p returned non-JSON output — report skipped, "
+              "re-run with --report-only")
+        return
+    db = dvtdb.connect()
+    rec = dvtdb.get_recording(db, base.name)
+    existing = dvtdb.get_report(db, rec["id"]) or \
+        {"summary": "", "decisions": [], "action_items": []}
+    requested = {k for k, _ in wanted}
+    summary = str(rep.get("summary", "")) if "summary" in requested else existing["summary"]
+    decisions = [str(x) for x in rep.get("decisions", [])] \
+        if "decisions" in requested else existing["decisions"]
+    action_items = [str(x) for x in rep.get("action_items", [])] \
+        if "action_items" in requested else existing["action_items"]
+    dvtdb.set_report(db, rec["id"], summary, decisions, action_items)
+    db.close()
+    print(f"Stored in record_reports ({lang_name}): "
+          f"summary={'yes' if summary else 'no'}, "
+          f"{len(decisions)} decisions, {len(action_items)} action items")
 
 if __name__ == "__main__":
     main()

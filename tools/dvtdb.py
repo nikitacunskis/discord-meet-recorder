@@ -88,7 +88,7 @@ def set_report(db, record_id: int, summary: str,
                decisions: list, action_items: list) -> None:
     """Replace the report rows for a recording (long format: one row per fact)."""
     db.execute("DELETE FROM record_reports WHERE record_id=?", (record_id,))
-    rows = [(record_id, summary or None, None, None)]
+    rows = [(record_id, summary, None, None)] if summary else []
     rows += [(record_id, None, x, None) for x in decisions if x]
     rows += [(record_id, None, None, x) for x in action_items if x]
     db.executemany(

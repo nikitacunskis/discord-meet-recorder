@@ -60,8 +60,10 @@ def run_transcribe(audio: Path, settings: dict) -> None:
     lang = settings.get("language", "auto")
     if lang != "auto":
         cmd += ["--language", lang]
-    if settings.get("report"):
-        cmd += ["--report", "--claude", settings.get("claude", "claude"),
+    sections = [f for f in ("report", "decisions", "actions") if settings.get(f)]
+    if sections:
+        cmd += ["--" + s for s in sections]
+        cmd += ["--claude", settings.get("claude", "claude"),
                 "--report-lang", settings.get("uiLang", "en")]
     send({"type": "log", "line": "$ " + " ".join(cmd)})
     try:

@@ -87,7 +87,7 @@ function logLine(text, cls) {
   while (els.log.childElementCount > 500) els.log.lastChild.remove();
 }
 
-const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setAuto', 'setOutDir'];
+const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setDecisions', 'setActions', 'setAuto', 'setOutDir'];
 const MODEL = 'large-v3-turbo';
 
 /** Whisper multilingual model language set (code, English name). */
@@ -320,6 +320,8 @@ function collectSettings() {
     model: MODEL,
     language: document.getElementById('setLang').value,
     report: document.getElementById('setReport').checked,
+    decisions: document.getElementById('setDecisions').checked,
+    actions: document.getElementById('setActions').checked,
     autoTranscribe: document.getElementById('setAuto').checked,
     outDir: document.getElementById('setOutDir').value.trim() || null,
   };
