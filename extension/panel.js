@@ -321,6 +321,11 @@ async function startRecording() {
     } catch (e) {
       micStream = null;
       logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
+      if (e.name === 'NotAllowedError') {
+        // panelī atļaujas prompt nerādās — to paņem atsevišķā paplašinājuma lapā
+        logLine(t('micPermOpening'));
+        chrome.tabs.create({ url: chrome.runtime.getURL('mic.html') });
+      }
     }
 
     audioCtx = new AudioContext();

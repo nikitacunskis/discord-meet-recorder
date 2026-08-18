@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="utf-8" />
+  <title>Mikrofona atļauja</title>
+  <style>
+    body { font: 16px/1.6 -apple-system, system-ui, sans-serif; background: #1e1f22;
+           color: #dbdee1; display: grid; place-items: center; height: 100vh; margin: 0; }
+    .card { max-width: 460px; text-align: center; padding: 32px; }
+    button { font-size: 16px; padding: 12px 28px; border: 0; border-radius: 6px;
+             background: #23a55a; color: #fff; cursor: pointer; margin-top: 18px; }
+    button:hover { background: #1a6334; }
+    #result { margin-top: 18px; font-weight: 600; }
+    .ok { color: #23a55a; } .err { color: #f23f43; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 data-i18n="micPermTitle">Mikrofona atļauja ierakstam</h1>
+    <p data-i18n="micPermExplain">Sānu panelis nevar parādīt Chrome atļaujas dialogu, tāpēc tā jāpiešķir šeit. Nospied pogu un atļauj mikrofonu — tas vajadzīgs, lai ierakstā būtu arī tava balss.</p>
+    <button id="grant" data-i18n="micPermBtn">Atļaut mikrofonu</button>
+    <div id="result"></div>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="mic.js"></script>
+</body>
+</html>
