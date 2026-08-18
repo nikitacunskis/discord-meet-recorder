@@ -127,12 +127,15 @@ for (const id of SETTINGS_KEYS)
 loadSettings().then(() => I18N.init().then(renderMicBtn));
 
 // Mapes selektors caur native hostu (macOS choose folder dialogs)
+document.getElementById('dirBtn').innerHTML = DVT_ICONS.folder;
+document.querySelector('.search-icon').innerHTML = DVT_ICONS.search;
 document.getElementById('dirBtn').addEventListener('click', () => {
   nativePort && nativePort.postMessage({ type: 'pick-dir' });
 });
 
 // Mikrofona slēdzis: vai ierakstā iet arī tava balss
 function renderMicBtn() {
+  els.micBtn.innerHTML = DVT_ICONS.mic;
   els.micBtn.classList.toggle('off', !micOn);
   els.micBtn.title = micOn ? t('micTipOn') : t('micTipOff');
 }
@@ -271,7 +274,7 @@ function renderRecList(msg) {
 
     const btn = document.createElement('button');
     btn.className = 'rec-edit';
-    btn.textContent = '✎';
+    btn.innerHTML = DVT_ICONS.pencil;
     btn.title = t('renameTitle');
     btn.addEventListener('click', () => {
       const input = document.createElement('input');
@@ -293,13 +296,13 @@ function renderRecList(msg) {
 
     const del = document.createElement('button');
     del.className = 'rec-edit rec-del';
-    del.textContent = '🗑';
+    del.innerHTML = DVT_ICONS.trash;
     del.title = t('deleteRec');
     del.addEventListener('click', () => {
       if (!del.classList.contains('danger')) {
         del.classList.add('danger');
         del.textContent = t('edConfirm');
-        setTimeout(() => { del.classList.remove('danger'); del.textContent = '🗑'; }, 2500);
+        setTimeout(() => { del.classList.remove('danger'); del.innerHTML = DVT_ICONS.trash; }, 2500);
         return;
       }
       nativePort && nativePort.postMessage({ type: 'delete-recording', base: it.base });

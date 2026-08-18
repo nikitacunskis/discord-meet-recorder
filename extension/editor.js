@@ -103,18 +103,18 @@ function render() {
     const tools = document.createElement('span');
     tools.className = 'tools';
     const editBtn = document.createElement('button');
-    editBtn.textContent = '✎';
+    editBtn.innerHTML = DVT_ICONS.pencil;
     editBtn.title = t('edEdit');
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); startEdit(row, u); });
     const delBtn = document.createElement('button');
-    delBtn.textContent = '✕';
+    delBtn.innerHTML = DVT_ICONS.x;
     delBtn.title = t('edDelete');
     delBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!delBtn.classList.contains('danger')) {
         delBtn.classList.add('danger');
         delBtn.textContent = t('edConfirm');
-        setTimeout(() => { delBtn.classList.remove('danger'); delBtn.textContent = '✕'; }, 2500);
+        setTimeout(() => { delBtn.classList.remove('danger'); delBtn.innerHTML = DVT_ICONS.x; }, 2500);
         return;
       }
       port.postMessage({ type: 'delete', id: u.id });
@@ -185,8 +185,9 @@ els.playBtn.addEventListener('click', () => {
   else els.audio.pause();
 });
 
-els.audio.addEventListener('play', () => (els.playBtn.textContent = '❚❚'));
-els.audio.addEventListener('pause', () => (els.playBtn.textContent = '▶'));
+els.audio.addEventListener('play', () => (els.playBtn.innerHTML = DVT_ICONS.pause));
+els.playBtn.innerHTML = DVT_ICONS.play;
+els.audio.addEventListener('pause', () => (els.playBtn.innerHTML = DVT_ICONS.play));
 
 // standarta triks Infinity-duration webm failiem: aizsēkojam līdz beigām,
 // lai pārlūks izrēķina īsto ilgumu, tad atgriežamies sākumā
