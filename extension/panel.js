@@ -10,7 +10,6 @@ const els = {
   timer: document.getElementById('timer'),
   nowSpeaking: document.getElementById('nowSpeaking'),
   log: document.getElementById('log'),
-  redownload: document.getElementById('redownload'),
 };
 
 let recorder = null;
@@ -343,7 +342,6 @@ async function startRecording() {
     document.body.classList.add('rec');
     els.startBtn.disabled = true;
     els.stopBtn.disabled = false;
-    els.redownload.hidden = true;
     setStatus('● Ieraksts rit');
     timerInterval = setInterval(
       () => (els.timer.textContent = fmtTime(Date.now() - t0)),
@@ -397,7 +395,6 @@ function onRecorderStop() {
     downloadAll();
     showCommand(base);
   }
-  els.redownload.hidden = false;
   cleanup();
 
   function downloadAll() {
@@ -465,12 +462,6 @@ function download(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 30000);
 }
 
-els.dlAudio = document.getElementById('dlAudio');
-els.dlJson = document.getElementById('dlJson');
-els.dlSrt = document.getElementById('dlSrt');
-els.dlAudio.addEventListener('click', () => lastFiles && download(lastFiles.audio, lastFiles.base + '.webm'));
-els.dlJson.addEventListener('click', () => lastFiles && download(lastFiles.json, lastFiles.base + '.speakers.json'));
-els.dlSrt.addEventListener('click', () => lastFiles && download(lastFiles.srt, lastFiles.base + '.speakers.srt'));
 
 // ---------- helpers ----------
 
