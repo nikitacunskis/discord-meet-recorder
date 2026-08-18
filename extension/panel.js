@@ -91,7 +91,6 @@ function logLine(text, cls) {
 
 const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setAuto', 'setOutDir'];
 const MODEL = 'large-v3-turbo'; // vienīgā opcija
-const SCRIPT_PATH = '~/git/personal/discord-voice-transcriber/tools/transcribe.py';
 
 async function loadSettings() {
   const stored = await chrome.storage.local.get(['dvtSettings', 'dvtMicOn']);
@@ -122,7 +121,6 @@ for (const id of SETTINGS_KEYS)
       I18N.setLang(document.getElementById(id).value);
       renderMicBtn();
     }
-    if (lastFiles) showCommand(lastFiles.base);
   });
 loadSettings().then(() => I18N.init().then(renderMicBtn));
 
@@ -240,26 +238,6 @@ document.getElementById('setMicDev').addEventListener('change', async () => {
   }
 });
 
-function buildCommand(base) {
-  const claude = document.getElementById('setClaude').value;
-  const lang = document.getElementById('setLang').value;
-  const report = document.getElementById('setReport').checked;
-  let cmd = `python3 ${SCRIPT_PATH} ~/Downloads/${base}.webm --model ${MODEL}`;
-  if (lang !== 'auto') cmd += ` --language ${lang}`;
-  if (report) cmd += ` --report --claude ${claude}`;
-  return cmd;
-}
-
-function showCommand(base) {
-  document.getElementById('cmd').textContent = buildCommand(base);
-  document.getElementById('cmdBlock').hidden = false;
-}
-
-document.getElementById('copyCmd').addEventListener('click', () => {
-  if (!lastFiles) return;
-  navigator.clipboard.writeText(buildCommand(lastFiles.base));
-  setStatus(t('copied'));
-});
 
 function collectSettings() {
   return {
@@ -629,7 +607,6 @@ function onRecorderStop() {
     });
   } else {
     downloadAll();
-    showCommand(base);
   }
   cleanup();
 
