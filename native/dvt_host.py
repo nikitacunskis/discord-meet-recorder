@@ -16,6 +16,12 @@ import sys
 import threading
 from pathlib import Path
 
+# Windows: native messaging prasa bināro stdin/stdout (bez CRLF tulkošanas)
+if sys.platform == "win32":
+    import msvcrt
+    msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+    msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+
 # Chrome palaiž hostu ar minimālu PATH — pievienojam brew un ~/.local/bin,
 # lai transcribe.py atrod ffmpeg, whisper-cli un claude.
 os.environ["PATH"] = ":".join([

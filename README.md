@@ -8,19 +8,75 @@ Chrome extension (MV3) that, during a Discord **web** call:
 
 Everything runs locally — no audio ever leaves the machine (the only optional network step is the `claude -p` report, which uses your own Claude subscription).
 
+## Requirements
+
+| Component | Why | Version |
+|---|---|---|
+| Google Chrome | the extension + native messaging | any recent |
+| Python | native host + transcription pipeline | 3.9+ (stdlib only, no pip packages) |
+| ffmpeg | audio conversion / remux | any recent |
+| whisper.cpp (`whisper-cli`) | local speech-to-text | any recent |
+| Claude Code CLI (`claude`) | optional `--report` step (summary + action items) | optional |
+
 ## Installation
+
+### 1. Load the extension (all platforms)
 
 1. Chrome → `chrome://extensions`
 2. Enable **Developer mode** (top-right corner)
 3. **Load unpacked** → pick the `extension/` folder
-4. Register the native host (auto-save, auto-transcription, editor backend):
+4. Copy the extension **ID** shown on the card — the next step needs it.
+
+### 2. Install the tools + register the native host
+
+The native host gives you auto-save into per-recording folders, automatic
+transcription and the editor backend. Without it the panel still works, but files fall
+back to Downloads and you transcribe manually.
+
+**macOS**
 
 ```bash
-# one-time setup
 brew install ffmpeg whisper-cpp
-./native/install.sh <extension-id from chrome://extensions>
+./native/install.sh <extension-id>
 # fully restart Chrome (Cmd+Q) afterwards
 ```
+
+**Linux (Debian/Ubuntu shown; Chrome or Chromium)**
+
+```bash
+sudo apt install ffmpeg cmake build-essential python3
+
+# whisper.cpp is not packaged in most distros — build once from source:
+git clone https://github.com/ggml-org/whisper.cpp
+cd whisper.cpp && cmake -B build && cmake --build build -j
+sudo cp build/bin/whisper-cli /usr/local/bin/
+cd ..
+
+./native/install.sh <extension-id>   # registers for Chrome and/or Chromium
+# fully restart the browser afterwards
+```
+
+**Windows (PowerShell)**
+
+```powershell
+winget install Python.Python.3.12 Gyan.FFmpeg
+# whisper.cpp: download the latest whisper-bin-x64.zip from
+#   https://github.com/ggml-org/whisper.cpp/releases
+# unzip it and add the folder containing whisper-cli.exe to PATH
+# (Settings -> System -> About -> Advanced system settings -> Environment Variables)
+
+cd native
+.\install.ps1 <extension-id>   # creates dvt_host.bat + registry entry, no admin needed
+# fully restart Chrome afterwards
+```
+
+Verify: `ffmpeg -version`, `whisper-cli --help` and `python3 --version` (Windows:
+`python --version`) must all work in a fresh terminal. In the extension panel the
+"Native host" warning line must disappear after the restart.
+
+**Claude CLI (optional, for `--report`)** — install per
+[claude.com/claude-code](https://claude.com/claude-code) (`npm install -g @anthropic-ai/claude-code`
+works on all three platforms), then pick your instance in the panel settings.
 
 ## Usage
 
@@ -46,6 +102,22 @@ python3 tools/transcribe.py ~/Downloads/discord-call-<date>.webm --report --clau
 
 Model: `large-v3-turbo` (the only option, ~1.6 GB, downloads itself on first run).
 If the call is mostly in one language, add `--language ru` / `lv` / `en` for fewer hallucinations.
+
+## Troubleshooting the native host
+
+The panel shows a "Native host: not installed" warning when Chrome cannot start the
+host. Check the registration for your platform:
+
+- **macOS**: `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.dvt.recorder.json`
+- **Linux**: `~/.config/google-chrome/NativeMessagingHosts/com.dvt.recorder.json`
+  (Chromium: `~/.config/chromium/...`)
+- **Windows**: registry key `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.dvt.recorder`
+  pointing to `native\com.dvt.recorder.json`, which launches `native\dvt_host.bat`
+
+The `allowed_origins` entry must contain your actual extension ID, and the browser must
+be fully restarted after registration. The host runs with a minimal PATH; on
+macOS/Linux the scripts add Homebrew and `~/.local/bin` themselves — on Windows make
+sure `ffmpeg` and `whisper-cli` are on the *system* PATH.
 
 ## How transcription works
 
