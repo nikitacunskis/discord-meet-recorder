@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -258,6 +259,9 @@ def process(audio_arg: Path, args) -> None:
         if m:
             env["CLAUDE_CONFIG_DIR"] = str(Path.home() / f".claude-{m.group(1)}")
             cmd = ["claude", "-p"]
+        resolved = shutil.which(cmd[0])
+        if resolved:
+            cmd[0] = resolved
         r = subprocess.run(cmd, input=prompt,
                            capture_output=True, text=True, env=env)
         if r.returncode != 0:
