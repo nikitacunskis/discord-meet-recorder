@@ -90,6 +90,86 @@ function logLine(text, cls) {
 const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setAuto', 'setOutDir'];
 const MODEL = 'large-v3-turbo';
 
+/** Whisper multilingual model language set (code, English name). */
+const WHISPER_LANGS = [
+  ['af', 'Afrikaans'], ['sq', 'Albanian'], ['am', 'Amharic'], ['ar', 'Arabic'],
+  ['hy', 'Armenian'], ['as', 'Assamese'], ['az', 'Azerbaijani'], ['ba', 'Bashkir'],
+  ['eu', 'Basque'], ['be', 'Belarusian'], ['bn', 'Bengali'], ['bs', 'Bosnian'],
+  ['br', 'Breton'], ['bg', 'Bulgarian'], ['my', 'Burmese'], ['yue', 'Cantonese'],
+  ['ca', 'Catalan'], ['zh', 'Chinese'], ['hr', 'Croatian'], ['cs', 'Czech'],
+  ['da', 'Danish'], ['nl', 'Dutch'], ['en', 'English'], ['et', 'Estonian'],
+  ['fo', 'Faroese'], ['fi', 'Finnish'], ['fr', 'French'], ['gl', 'Galician'],
+  ['ka', 'Georgian'], ['de', 'German'], ['el', 'Greek'], ['gu', 'Gujarati'],
+  ['ht', 'Haitian Creole'], ['ha', 'Hausa'], ['haw', 'Hawaiian'], ['he', 'Hebrew'],
+  ['hi', 'Hindi'], ['hu', 'Hungarian'], ['is', 'Icelandic'], ['id', 'Indonesian'],
+  ['it', 'Italian'], ['ja', 'Japanese'], ['jw', 'Javanese'], ['kn', 'Kannada'],
+  ['kk', 'Kazakh'], ['km', 'Khmer'], ['ko', 'Korean'], ['lo', 'Lao'],
+  ['la', 'Latin'], ['lv', 'Latvian'], ['ln', 'Lingala'], ['lt', 'Lithuanian'],
+  ['lb', 'Luxembourgish'], ['mk', 'Macedonian'], ['mg', 'Malagasy'], ['ms', 'Malay'],
+  ['ml', 'Malayalam'], ['mt', 'Maltese'], ['mi', 'Maori'], ['mr', 'Marathi'],
+  ['mn', 'Mongolian'], ['ne', 'Nepali'], ['no', 'Norwegian'], ['nn', 'Nynorsk'],
+  ['oc', 'Occitan'], ['ps', 'Pashto'], ['fa', 'Persian'], ['pl', 'Polish'],
+  ['pt', 'Portuguese'], ['pa', 'Punjabi'], ['ro', 'Romanian'], ['ru', 'Russian'],
+  ['sa', 'Sanskrit'], ['sr', 'Serbian'], ['sn', 'Shona'], ['sd', 'Sindhi'],
+  ['si', 'Sinhala'], ['sk', 'Slovak'], ['sl', 'Slovenian'], ['so', 'Somali'],
+  ['es', 'Spanish'], ['su', 'Sundanese'], ['sw', 'Swahili'], ['sv', 'Swedish'],
+  ['tl', 'Tagalog'], ['tg', 'Tajik'], ['ta', 'Tamil'], ['tt', 'Tatar'],
+  ['te', 'Telugu'], ['th', 'Thai'], ['bo', 'Tibetan'], ['tr', 'Turkish'],
+  ['tk', 'Turkmen'], ['uk', 'Ukrainian'], ['ur', 'Urdu'], ['uz', 'Uzbek'],
+  ['vi', 'Vietnamese'], ['cy', 'Welsh'], ['yi', 'Yiddish'], ['yo', 'Yoruba'],
+];
+
+async function storedSetting(key) {
+  const s = (await chrome.storage.local.get('dvtSettings')).dvtSettings || {};
+  return s[key];
+}
+
+async function populateUiLangs() {
+  const sel = document.getElementById('setUiLang');
+  sel.innerHTML = '';
+  for (const code of Object.keys(DVT_STRINGS)) {
+    const o = document.createElement('option');
+    o.value = code;
+    o.textContent = DVT_STRINGS[code]._name || code;
+    sel.appendChild(o);
+  }
+  sel.value = (await storedSetting('setUiLang')) || I18N.lang;
+}
+
+async function populateWhisperLangs() {
+  const sel = document.getElementById('setLang');
+  sel.innerHTML = '';
+  const auto = document.createElement('option');
+  auto.value = 'auto';
+  auto.textContent = t('langAuto');
+  sel.appendChild(auto);
+  for (const [code, name] of WHISPER_LANGS) {
+    const o = document.createElement('option');
+    o.value = code;
+    o.textContent = `${name} (${code})`;
+    sel.appendChild(o);
+  }
+  sel.value = (await storedSetting('setLang')) || 'auto';
+}
+
+async function populateClaude(items) {
+  const sel = document.getElementById('setClaude');
+  sel.innerHTML = '';
+  for (const name of items && items.length ? items : ['claude']) {
+    const o = document.createElement('option');
+    o.value = name;
+    o.textContent = name === 'claude' ? 'claude (~/.claude)' : `${name} (~/.${name})`;
+    sel.appendChild(o);
+  }
+  const want = await storedSetting('setClaude');
+  if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
+}
+
+document.getElementById('claudeHelpBtn').addEventListener('click', () => {
+  const h = document.getElementById('claudeHelp');
+  h.hidden = !h.hidden;
+});
+
 async function loadSettings() {
   const stored = await chrome.storage.local.get(['dvtSettings', 'dvtMicOn']);
   const s = stored.dvtSettings || {};
@@ -118,9 +198,14 @@ for (const id of SETTINGS_KEYS)
     if (id === 'setUiLang') {
       I18N.setLang(document.getElementById(id).value);
       renderMicBtn();
+      populateWhisperLangs();
     }
   });
-loadSettings().then(() => I18N.init().then(renderMicBtn));
+loadSettings().then(() => I18N.init().then(() => {
+  renderMicBtn();
+  populateUiLangs();
+  populateWhisperLangs();
+}));
 
 document.getElementById('dirBtn').innerHTML = DVT_ICONS.folder;
 document.querySelector('.search-icon').innerHTML = DVT_ICONS.search;
@@ -256,6 +341,7 @@ function connectNative() {
     statusline(els.native, t('nativeMissing'));
   });
   nativePort.postMessage({ type: 'ping' });
+  nativePort.postMessage({ type: 'claude-instances' });
   requestList();
 }
 
@@ -291,6 +377,8 @@ function onNativeMsg(msg) {
   } else if (msg.type === 'done') {
     setStatus(msg.code === 0 ? t('transDone') + msg.base : t('transFail'));
     requestList();
+  } else if (msg.type === 'claude-instances') {
+    populateClaude(msg.items);
   } else if (msg.type === 'list') {
     renderRecList(msg);
   } else if (msg.type === 'title-set' || msg.type === 'recording-deleted') {

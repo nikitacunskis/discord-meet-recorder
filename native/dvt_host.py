@@ -182,6 +182,11 @@ def main() -> None:
         t = msg.get("type")
         if t == "ping":
             send({"type": "pong", "dir": str(base_dir)})
+        elif t == "claude-instances":
+            home = Path.home()
+            items = ["claude"] if (home / ".claude").is_dir() else []
+            items += sorted(d.name[1:] for d in home.glob(".claude-*") if d.is_dir())
+            send({"type": "claude-instances", "items": items or ["claude"]})
         elif t == "load":
             try:
                 handle_load(msg, Path(msg.get("dir") or base_dir).expanduser())

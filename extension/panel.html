@@ -28,27 +28,17 @@
   <h2 data-i18n="settings">Iestatījumi</h2>
   <div class="settings">
     <label><span data-i18n="uiLang">Interfeisa valoda</span>
-      <select id="setUiLang">
-        <option value="en">English</option>
-        <option value="lv">Latviešu</option>
-        <option value="de">Deutsch</option>
-        <option value="zh">中文</option>
-      </select>
+      <select id="setUiLang"></select>
     </label>
     <label><span data-i18n="claudeCli">Claude CLI</span>
-      <select id="setClaude">
-        <option value="claude">claude (~/.claude)</option>
-        <option value="claude-personal">claude-personal (~/.claude-personal)</option>
-        <option value="claude-rgp">claude-rgp (~/.claude-rgp)</option>
-      </select>
+      <span class="dir-wrap">
+        <select id="setClaude"><option value="claude">claude</option></select>
+        <button id="claudeHelpBtn" type="button">?</button>
+      </span>
     </label>
+    <div id="claudeHelp" class="help" data-i18n="claudeHelp" hidden></div>
     <label><span data-i18n="whisperLang">Valoda</span>
-      <select id="setLang">
-        <option value="auto" selected data-i18n="langAuto">auto</option>
-        <option value="lv" data-i18n="langLv">latviešu</option>
-        <option value="ru" data-i18n="langRu">krievu</option>
-        <option value="en" data-i18n="langEn">angļu</option>
-      </select>
+      <select id="setLang"></select>
     </label>
     <label><span data-i18n="micDevice">Mikrofons</span>
       <select id="setMicDev">

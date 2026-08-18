@@ -5,6 +5,8 @@
  */
 const DVT_STRINGS = {
   en: {
+    _name: 'English',
+    claudeHelp: 'Instances are auto-detected from ~/.claude* config folders. To add one, run in a terminal: CLAUDE_CONFIG_DIR=~/.claude-<name> claude — and log in. It will appear here as claude-<name>.',
     deleteRec: 'Delete recording (files + DB)',
     searchPh: 'search by call id, title, or content', micTipOn: 'Microphone ON — your voice will be recorded', micTipOff: 'Microphone OFF — your voice will NOT be recorded', show: 'Show', hide: 'Hide',
     renameTitle: 'Rename', titlePh: 'Title…',
@@ -49,6 +51,8 @@ const DVT_STRINGS = {
     edSave: 'Save', edCancel: 'Cancel',
   },
   lv: {
+    _name: 'Latviešu',
+    claudeHelp: 'Instances tiek atrastas automātiski no ~/.claude* konfigurācijas mapēm. Lai pievienotu jaunu, terminālī palaid: CLAUDE_CONFIG_DIR=~/.claude-<vārds> claude — un pieslēdzies. Tā parādīsies šeit kā claude-<vārds>.',
     deleteRec: 'Dzēst ierakstu (faili + DB)',
     searchPh: 'meklē pēc ID, nosaukuma vai satura', micTipOn: 'Mikrofons IESLĒGTS — tava balss tiks ierakstīta', micTipOff: 'Mikrofons IZSLĒGTS — tava balss NETIKS ierakstīta', show: 'Rādīt', hide: 'Slēpt',
     renameTitle: 'Pārsaukt', titlePh: 'Nosaukums…',
@@ -93,6 +97,8 @@ const DVT_STRINGS = {
     edSave: 'Saglabāt', edCancel: 'Atcelt',
   },
   de: {
+    _name: 'Deutsch',
+    claudeHelp: 'Instanzen werden automatisch aus ~/.claude*-Konfigurationsordnern erkannt. Neue anlegen: im Terminal CLAUDE_CONFIG_DIR=~/.claude-<name> claude ausführen und anmelden. Sie erscheint hier als claude-<name>.',
     deleteRec: 'Aufnahme löschen (Dateien + DB)',
     searchPh: 'Suche nach ID, Titel oder Inhalt', micTipOn: 'Mikrofon AN — deine Stimme wird aufgenommen', micTipOff: 'Mikrofon AUS — deine Stimme wird NICHT aufgenommen', show: 'Anzeigen', hide: 'Ausblenden',
     renameTitle: 'Umbenennen', titlePh: 'Titel…',
@@ -137,6 +143,8 @@ const DVT_STRINGS = {
     edSave: 'Speichern', edCancel: 'Abbrechen',
   },
   zh: {
+    _name: '中文',
+    claudeHelp: '实例会从 ~/.claude* 配置文件夹自动检测。添加新实例：在终端运行 CLAUDE_CONFIG_DIR=~/.claude-<名称> claude 并登录，它将在此处显示为 claude-<名称>。',
     deleteRec: '删除录音（文件 + 数据库）',
     searchPh: '按 ID、标题或内容搜索', micTipOn: '麦克风已开——将录制你的声音', micTipOff: '麦克风已关——不会录制你的声音', show: '显示', hide: '隐藏',
     renameTitle: '重命名', titlePh: '标题…',

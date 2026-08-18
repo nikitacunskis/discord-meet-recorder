@@ -174,3 +174,13 @@ button svg { display: block; margin: auto; }
   display: block; height: 100%; width: 0%;
   background: #23a55a; transition: width 80ms linear;
 }
+
+#claudeHelpBtn {
+  width: 22px; height: 22px; border-radius: 50%; border: 1px solid #3f4147;
+  background: #2b2d31; color: #949ba4; font-size: 12px; cursor: pointer; padding: 0;
+}
+#claudeHelpBtn:hover { color: #fff; }
+.help {
+  font-size: 12px; color: #949ba4; background: #2b2d31;
+  border-radius: 4px; padding: 8px 10px; line-height: 1.5;
+}
