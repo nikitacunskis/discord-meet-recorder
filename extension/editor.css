@@ -92,3 +92,23 @@ footer#player {
 button svg { display: block; margin: auto; }
 #playBtn svg { width: 24px; height: 24px; }
 .tools button svg { width: 15px; height: 15px; }
+
+#reportBlock {
+  margin: 16px 20px 0;
+  max-width: 1200px;
+}
+#reportBlock h2 {
+  font-size: 13px; text-transform: uppercase; color: #666; margin: 0 0 8px;
+}
+#reportBody {
+  background: #fff; border: 1px solid #bbb; border-radius: 3px;
+  padding: 14px 18px; white-space: pre-wrap; line-height: 1.55;
+  max-height: 40vh; overflow-y: auto;
+}
+
+#reportBody h3 {
+  font-size: 12px; text-transform: uppercase; color: #888; margin: 12px 0 4px;
+}
+#reportBody ul { margin: 0; padding-left: 20px; }
+#reportBody li { margin: 2px 0; }
+.rep-summary { margin: 0; }

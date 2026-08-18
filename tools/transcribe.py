@@ -33,6 +33,9 @@ os.environ["PATH"] = ":".join([
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dvtdb
 
+REPORT_LANGS = {"en": "English", "lv": "Latvian", "de": "German",
+                "zh": "Chinese", "ru": "Russian"}
+
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{m}.bin"
 
@@ -151,6 +154,8 @@ def main() -> None:
     ap.add_argument("--language", default="auto")
     ap.add_argument("--claude", default="claude",
                     help="claude CLI binārijs --report solim: claude | claude-personal | claude-rgp | pilns ceļš")
+    ap.add_argument("--report-lang", default="en",
+                    help="report language code (matches the panel UI language)")
     ap.add_argument("--report", action="store_true",
                     help="pēc transkripcijas izlaist caur Claude (claude -p): "
                          "kļūdu labošana + kopsavilkums + action items")
@@ -238,20 +243,19 @@ def process(audio_arg: Path, args) -> None:
     print("\n".join(lines))
 
     if args.report:
-        print(f"\nSūtu Claude uz salabošanu un kopsavilkumu ({args.claude} -p) …")
+        lang_name = REPORT_LANGS.get(args.report_lang, "English")
+        print(f"\nGenerating report via {args.claude} -p ({lang_name}) …")
         prompt = (
-            "Šis ir automātisks Whisper transkripts no Discord zvana ar runātāju "
-            "atribūciju pēc laika zīmogiem. Runa brīvi jaucas starp latviešu, krievu "
-            "un angļu valodu — tas ir normāli.\n\n"
-            "Uzdevums:\n"
-            "1. Salabo acīmredzamas atpazīšanas kļūdas pēc konteksta, bet NEizdomā "
-            "saturu, kura tur nav, un saglabā valodu maisījumu, kā runāts.\n"
-            "2. Saglabā formātu [HH:MM:SS] vārds: teksts.\n"
-            "3. Beigās pievieno sadaļas: Kopsavilkums, Lēmumi, Action items "
-            "(ja tādu nav — raksti 'nav').\n"
-            "4. Atbildē izvadi TIKAI gatavo dokumentu — bez ievada, bez "
-            "komentāriem par uzdevumu, bez noslēguma frāzēm.\n\n"
-            "Transkripts:\n\n" + out_file.read_text()
+            "You are given an automatic Whisper transcript of a Discord call "
+            "with speaker attribution from timestamps. Speech may freely mix "
+            "several languages within one sentence.\n\n"
+            f"Produce a meeting report written in {lang_name}. Output STRICT "
+            "JSON only — no markdown, no code fences, no extra keys — with "
+            "exactly this shape:\n"
+            '{"summary": "...", "decisions": ["..."], "action_items": ["..."]}\n'
+            "Empty arrays are allowed when the call contains no decisions or "
+            "action items. Do not invent content that is not in the transcript.\n\n"
+            "Transcript:\n\n" + out_file.read_text()
         )
         env = os.environ.copy()
         cmd = [args.claude, "-p"]
@@ -265,11 +269,23 @@ def process(audio_arg: Path, args) -> None:
         r = subprocess.run(cmd, input=prompt,
                            capture_output=True, text=True, env=env)
         if r.returncode != 0:
-            sys.exit(f"claude -p neizdevās (rc={r.returncode}):\n"
+            sys.exit(f"claude -p failed (rc={r.returncode}):\n"
                      f"stderr: {r.stderr[-1000:]}\nstdout: {r.stdout[-1000:]}")
-        report_file = Path(str(base) + ".report.md")
-        report_file.write_text(r.stdout)
-        print(f"Gatavs: {report_file}")
+        raw = r.stdout.strip()
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
+        try:
+            rep = json.loads(raw)
+            summary = str(rep.get("summary", ""))
+            decisions = [str(x) for x in rep.get("decisions", [])]
+            action_items = [str(x) for x in rep.get("action_items", [])]
+        except (json.JSONDecodeError, AttributeError):
+            summary, decisions, action_items = raw, [], []
+        db = dvtdb.connect()
+        rec = dvtdb.get_recording(db, base.name)
+        dvtdb.set_report(db, rec["id"], summary, decisions, action_items)
+        db.close()
+        print(f"Report stored in record_reports ({lang_name}): "
+              f"{len(decisions)} decisions, {len(action_items)} action items")
 
 if __name__ == "__main__":
     main()

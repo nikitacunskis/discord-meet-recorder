@@ -46,6 +46,10 @@ port.onMessage.addListener((msg) => {
       els.title.title = msg.base;
       document.title = msg.title;
     }
+    if (msg.report && (msg.report.summary || msg.report.decisions.length || msg.report.action_items.length)) {
+      renderReport(msg.report);
+      document.getElementById('reportBlock').hidden = false;
+    }
     utts = msg.lines;
     knownDurMs = utts.reduce((m, u) => Math.max(m, u.end_dt_ms), 0);
     els.clock.textContent = `${fmt(0)} / ${knownDurMs ? fmt(knownDurMs) : '--:--:--'}`;
@@ -68,6 +72,32 @@ port.onMessage.addListener((msg) => {
   }
 });
 port.postMessage({ type: 'load', base });
+
+function renderReport(rep) {
+  const body = document.getElementById('reportBody');
+  body.innerHTML = '';
+  if (rep.summary) {
+    const s = document.createElement('p');
+    s.className = 'rep-summary';
+    s.textContent = rep.summary;
+    body.appendChild(s);
+  }
+  const section = (titleKey, items, cls) => {
+    if (!items.length) return;
+    const h = document.createElement('h3');
+    h.textContent = t(titleKey);
+    const ul = document.createElement('ul');
+    ul.className = cls;
+    for (const it of items) {
+      const li = document.createElement('li');
+      li.textContent = it;
+      ul.appendChild(li);
+    }
+    body.append(h, ul);
+  };
+  section('edDecisions', rep.decisions, 'rep-decisions');
+  section('edActions', rep.action_items, 'rep-actions');
+}
 
 function fmt(ms) {
   const s = Math.floor(ms / 1000);

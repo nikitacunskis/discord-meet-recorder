@@ -4,6 +4,9 @@ Schema:
   recordings(id, base, dir, title, start_dt, end_dt)
   text_lines(id, recording_id, speaker_name, speaker_line,
              start_dt_ms, end_dt_ms, edited)
+  record_reports(id, record_id, summary, decision, action_item)
+    long format: one row carries the summary, one row per decision,
+    one row per action item
 
 `base`/`dir` locate the files on disk; `edited=1` marks hand-edited lines that
 re-transcription must not overwrite. connect() creates the schema and migrates
@@ -61,6 +64,12 @@ def _create(db: sqlite3.Connection) -> None:
         end_dt_ms INTEGER NOT NULL,
         edited INTEGER NOT NULL DEFAULT 0)""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_lines ON text_lines(recording_id, start_dt_ms)")
+    db.execute("""CREATE TABLE IF NOT EXISTS record_reports(
+        id INTEGER PRIMARY KEY,
+        record_id INTEGER NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+        summary TEXT,
+        decision TEXT,
+        action_item TEXT)""")
 
 def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,6 +83,35 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
         db.execute("ALTER TABLE recordings ADD COLUMN title TEXT")
         db.commit()
     return db
+
+def set_report(db, record_id: int, summary: str,
+               decisions: list, action_items: list) -> None:
+    """Replace the report rows for a recording (long format: one row per fact)."""
+    db.execute("DELETE FROM record_reports WHERE record_id=?", (record_id,))
+    rows = [(record_id, summary or None, None, None)]
+    rows += [(record_id, None, x, None) for x in decisions if x]
+    rows += [(record_id, None, None, x) for x in action_items if x]
+    db.executemany(
+        "INSERT INTO record_reports(record_id, summary, decision, action_item) VALUES(?,?,?,?)",
+        rows)
+    db.commit()
+
+def get_report(db, record_id: int) -> dict | None:
+    rows = db.execute(
+        "SELECT summary, decision, action_item FROM record_reports WHERE record_id=? ORDER BY id",
+        (record_id,)).fetchall()
+    if not rows:
+        return None
+    return {
+        "summary": next((r["summary"] for r in rows if r["summary"]), ""),
+        "decisions": [r["decision"] for r in rows if r["decision"]],
+        "action_items": [r["action_item"] for r in rows if r["action_item"]],
+    }
+
+def report_bases(db) -> set:
+    return {r["base"] for r in db.execute(
+        """SELECT DISTINCT r.base FROM recordings r
+           JOIN record_reports p ON p.record_id = r.id""")}
 
 def set_title(db, base: str, title: str, rec_dir: str | None = None) -> None:
     """Set the user-given title; `base` (the ID) never changes."""

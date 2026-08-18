@@ -316,6 +316,7 @@ document.getElementById('setMicDev').addEventListener('change', async () => {
 function collectSettings() {
   return {
     claude: document.getElementById('setClaude').value,
+    uiLang: document.getElementById('setUiLang').value || I18N.lang,
     model: MODEL,
     language: document.getElementById('setLang').value,
     report: document.getElementById('setReport').checked,

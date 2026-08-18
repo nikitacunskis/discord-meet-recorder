@@ -6,6 +6,7 @@
 const DVT_STRINGS = {
   en: {
     _name: 'English',
+    edReport: 'Meeting report', edSummary: 'Summary', edDecisions: 'Decisions', edActions: 'Action items',
     claudeHelp: 'Instances are auto-detected from ~/.claude* config folders. To add one, log in once with a separate config dir — macOS/Linux: CLAUDE_CONFIG_DIR=~/.claude-<name> claude · Windows (PowerShell): $env:CLAUDE_CONFIG_DIR=\"$HOME\\.claude-<name>\"; claude. It will appear here as claude-<name>.',
     deleteRec: 'Delete recording (files + DB)',
     searchPh: 'search by call id, title, or content', micTipOn: 'Microphone ON — your voice will be recorded', micTipOff: 'Microphone OFF — your voice will NOT be recorded', show: 'Show', hide: 'Hide',
@@ -52,6 +53,7 @@ const DVT_STRINGS = {
   },
   lv: {
     _name: 'Latviešu',
+    edReport: 'Sapulces reports', edSummary: 'Kopsavilkums', edDecisions: 'Lēmumi', edActions: 'Action items',
     claudeHelp: 'Instances tiek atrastas automātiski no ~/.claude* konfigurācijas mapēm. Jaunai instancei vienreiz pieslēdzies ar atsevišķu konfigurācijas mapi — macOS/Linux: CLAUDE_CONFIG_DIR=~/.claude-<vārds> claude · Windows (PowerShell): $env:CLAUDE_CONFIG_DIR=\"$HOME\\.claude-<vārds>\"; claude. Tā parādīsies šeit kā claude-<vārds>.',
     deleteRec: 'Dzēst ierakstu (faili + DB)',
     searchPh: 'meklē pēc ID, nosaukuma vai satura', micTipOn: 'Mikrofons IESLĒGTS — tava balss tiks ierakstīta', micTipOff: 'Mikrofons IZSLĒGTS — tava balss NETIKS ierakstīta', show: 'Rādīt', hide: 'Slēpt',
@@ -98,6 +100,7 @@ const DVT_STRINGS = {
   },
   de: {
     _name: 'Deutsch',
+    edReport: 'Besprechungsbericht', edSummary: 'Zusammenfassung', edDecisions: 'Entscheidungen', edActions: 'Aufgaben',
     claudeHelp: 'Instanzen werden automatisch aus ~/.claude*-Konfigurationsordnern erkannt. Neue anlegen: einmal mit separatem Konfigurationsordner anmelden — macOS/Linux: CLAUDE_CONFIG_DIR=~/.claude-<name> claude · Windows (PowerShell): $env:CLAUDE_CONFIG_DIR=\"$HOME\\.claude-<name>\"; claude. Sie erscheint hier als claude-<name>.',
     deleteRec: 'Aufnahme löschen (Dateien + DB)',
     searchPh: 'Suche nach ID, Titel oder Inhalt', micTipOn: 'Mikrofon AN — deine Stimme wird aufgenommen', micTipOff: 'Mikrofon AUS — deine Stimme wird NICHT aufgenommen', show: 'Anzeigen', hide: 'Ausblenden',
@@ -144,6 +147,7 @@ const DVT_STRINGS = {
   },
   zh: {
     _name: '中文',
+    edReport: '会议报告', edSummary: '摘要', edDecisions: '决定', edActions: '行动项',
     claudeHelp: '实例会从 ~/.claude* 配置文件夹自动检测。添加新实例：用单独的配置目录登录一次 — macOS/Linux: CLAUDE_CONFIG_DIR=~/.claude-<名称> claude · Windows (PowerShell): $env:CLAUDE_CONFIG_DIR=\"$HOME\\.claude-<名称>\"; claude。它将在此处显示为 claude-<名称>。',
     deleteRec: '删除录音（文件 + 数据库）',
     searchPh: '按 ID、标题或内容搜索', micTipOn: '麦克风已开——将录制你的声音', micTipOff: '麦克风已关——不会录制你的声音', show: '显示', hide: '隐藏',
