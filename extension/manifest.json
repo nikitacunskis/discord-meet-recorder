@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Discord Call Recorder + Speaker Timeline",
   "version": "0.1.0",
-  "description": "Ieraksta Discord web zvana audio (.webm) un runātāju laika joslu no DOM (.json/.srt). Viss lokāli, nekas nekur netiek sūtīts.",
+  "description": "Records Discord web call audio (.webm) and the speaker timeline from the DOM (.json/.srt). Everything stays local; nothing is sent anywhere.",
   "permissions": ["tabCapture", "sidePanel", "tabs", "activeTab", "storage", "nativeMessaging"],
   "host_permissions": ["https://discord.com/*"],
   "background": { "service_worker": "background.js" },
