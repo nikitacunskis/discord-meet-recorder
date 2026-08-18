@@ -1,0 +1,8 @@
+{
+  "appName": {
+    "message": "Discord Call Recorder + Speaker Timeline"
+  },
+  "appDesc": {
+    "message": "Ieraksta Discord web zvana audio (.webm) un runātāju laika joslu no DOM (.json/.srt). Viss paliek lokāli; nekas nekur netiek sūtīts."
+  }
+}

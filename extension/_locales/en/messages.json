@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Discord Call Recorder + Speaker Timeline",
+    "description": "Extension name"
+  },
+  "appDesc": {
+    "message": "Records Discord web call audio (.webm) and the speaker timeline from the DOM (.json/.srt). Everything stays local; nothing is sent anywhere.",
+    "description": "Extension description"
+  }
+}

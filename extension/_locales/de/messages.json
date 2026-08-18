@@ -1,0 +1,8 @@
+{
+  "appName": {
+    "message": "Discord Call Recorder + Speaker Timeline"
+  },
+  "appDesc": {
+    "message": "Nimmt Discord-Web-Anrufaudio (.webm) und die Sprecher-Timeline aus dem DOM (.json/.srt) auf. Alles bleibt lokal; nichts wird irgendwohin gesendet."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "appName": {
+    "message": "Discord Call Recorder + Speaker Timeline"
+  },
+  "appDesc": {
+    "message": "录制 Discord 网页通话音频（.webm）以及来自 DOM 的说话人时间线（.json/.srt）。所有数据均保留在本地，不会发送到任何地方。"
+  }
+}

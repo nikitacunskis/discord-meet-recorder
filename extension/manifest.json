@@ -1,18 +1,38 @@
 {
   "manifest_version": 3,
-  "name": "Discord Call Recorder + Speaker Timeline",
+  "name": "__MSG_appName__",
   "version": "0.1.0",
-  "description": "Records Discord web call audio (.webm) and the speaker timeline from the DOM (.json/.srt). Everything stays local; nothing is sent anywhere.",
-  "permissions": ["tabCapture", "sidePanel", "tabs", "activeTab", "storage", "nativeMessaging"],
-  "host_permissions": ["https://discord.com/*"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Discord Call Recorder" },
-  "side_panel": { "default_path": "panel.html" },
+  "description": "__MSG_appDesc__",
+  "permissions": [
+    "tabCapture",
+    "sidePanel",
+    "tabs",
+    "activeTab",
+    "storage",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "https://discord.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "__MSG_appName__"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
   "content_scripts": [
     {
-      "matches": ["https://discord.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://discord.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "default_locale": "en"
 }
