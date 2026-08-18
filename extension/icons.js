@@ -1,4 +1,4 @@
-// Vienkāršas līniju ikonas (stroke: currentColor) — emoji vietā.
+/** Inline SVG icons used by the panel (DVT_ICONS). */
 const _I = (inner, fill) =>
   `<svg viewBox="0 0 24 24" width="16" height="16" ${
     fill ? 'fill="currentColor" stroke="none"'

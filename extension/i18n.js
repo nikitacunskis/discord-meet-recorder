@@ -1,5 +1,8 @@
-// Vienkāršs i18n slānis panelim un redaktoram.
-// Valodu izvēlas iestatījumos (setUiLang); noklusēti — pārlūka valoda.
+/**
+ * UI strings for the panel/editor/mic pages.
+ * I18N.init() applies data-i18n/data-i18n-ph attributes; t(key) returns the
+ * string in the active language (stored in chrome.storage, default: browser).
+ */
 const DVT_STRINGS = {
   en: {
     deleteRec: 'Delete recording (files + DB)',

@@ -1,22 +1,18 @@
-// Discord runātāju sensors.
-// Universālais signāls (pārbaudīts pret reāliem DOM paraugiem abos skatos, 2026-08-17):
-// kad cilvēks runā, viņa elements (flīzes rāmis vai sānjoslas avatārs) iegūst
-// inline stilu `box-shadow: ... var(--status-speaking) ...`. Klusumā šī CSS
-// mainīgā lapā nav vispār. CSS mainīgā vārds ir semantisks un stabils —
-// atšķirībā no klašu hash, kas mainās ar katru Discord build.
-//
-// Runātāja identifikācija:
-//  - flīžu skats: tile elementam ir data-selenium-video-tile="<userId>" un
-//    focusTarget ar aria-label="Call tile, <vārds>"
-//  - sānjosla: voiceUser elements ar username div un avatāra URL (satur userId)
+/**
+ * Discord speaking sensor (content script).
+ * Speaking signal: inline `box-shadow: var(--status-speaking)` (tile and sidebar
+ * views); fallback: `usernameSpeaking` class. Polls every 250 ms — a body-wide
+ * MutationObserver can crash the tab renderer in large calls.
+ * Emits `dvt-speaking` runtime messages; answers `dvt-ping` with
+ * {speakers, participants, voiceUsers, tiles}.
+ */
 (() => {
-  const active = new Map(); // key (userId vai vārds) -> {name, userId}
+  const active = new Map();
 
   function send(msg) {
     try {
       chrome.runtime.sendMessage(msg).catch(() => {});
     } catch (e) {
-      // extension konteksts pārlādēts — ignorējam
     }
   }
 
@@ -36,7 +32,6 @@
   }
 
   function speakerInfo(el) {
-    // flīžu (zvana) skats
     const tile = el.closest('[data-selenium-video-tile]');
     if (tile) {
       const userId = tile.getAttribute('data-selenium-video-tile') || null;
@@ -44,12 +39,11 @@
       const ft = tile.querySelector('[class*="focusTarget"][aria-label]');
       if (ft) {
         const label = ft.getAttribute('aria-label') || '';
-        const m = label.match(/^[^,]*,\s*(.+)$/); // "Call tile, vārds" -> "vārds"
+        const m = label.match(/^[^,]*,\s*(.+)$/);
         name = (m ? m[1] : label).trim();
       }
       return { name: name || userId || '', userId };
     }
-    // sānjoslas saraksts
     const vu = el.closest('[class*="voiceUser"]');
     if (vu) {
       const nameEl = vu.querySelector('[class*="username"]');
@@ -58,28 +52,23 @@
         userId: userIdFrom(vu),
       };
     }
-    // rezerve: pats elements ir username div (usernameSpeaking klases ceļš)
     if (cls(el).includes('username')) {
       return { name: (el.textContent || '').trim(), userId: null };
     }
     return { name: '', userId: null };
   }
 
-  // Vai atvērts zvana (flīžu) skats? Ja jā, ticam tikai tam — sānjoslā redzami
-  // arī CITU kanālu cilvēki un viņu runāšanas indikatori.
   const tilesVisible = () =>
     document.querySelector('[data-selenium-video-tile]') !== null;
 
   function currentSpeakers() {
     const now = new Map();
     const onlyTiles = tilesVisible();
-    // galvenais signāls: inline stils ar var(--status-speaking)
     for (const el of document.querySelectorAll('[style*="status-speaking"]')) {
       if (onlyTiles && !el.closest('[data-selenium-video-tile]')) continue;
       const info = speakerInfo(el);
       if (info.name) now.set(info.userId || info.name, info);
     }
-    // rezerves signāls: sānjoslas usernameSpeaking__<hash> klase
     if (!onlyTiles) {
       for (const el of document.querySelectorAll('[class*="usernameSpeaking"]')) {
         const info = speakerInfo(el);
@@ -107,13 +96,8 @@
     }
   }
 
-  // Bez MutationObserver: Discord ģenerē tūkstošiem mutāciju sekundē, un
-  // novērotājs uz visa body lielā zvanā spēj nogāzt taba renderi. Tā vietā —
-  // viens lēts atribūta-selektora vaicājums 4× sekundē; ±250 ms precizitāte
-  // runātāju intervāliem ir vairāk nekā pietiekama.
   setInterval(sweep, 250);
 
-  // Mans userId no konta paneļa (apakšā pa kreisi) avatāra URL.
   function myUserId() {
     const panel = document.querySelector('section[class*="panels"], [class*="panels_"]');
     if (!panel) return null;
@@ -123,9 +107,6 @@
     return m ? m[1] : null;
   }
 
-  // Manas istabas dalībnieki. Primāri no flīžu (zvana) skata; ja tas nav
-  // atvērts — no sānjoslas, bet TIKAI no tā kanāla saraksta, kurā esmu es
-  // pats (sānjoslā redzami arī citu kanālu cilvēki).
   function currentParticipants() {
     const seen = new Map();
     for (const tile of document.querySelectorAll('[data-selenium-video-tile]')) {
@@ -155,7 +136,6 @@
     return [...seen.values()];
   }
 
-  // Panelis pingo, lai zinātu, ka sensors dzīvs.
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === 'dvt-ping') {
       sendResponse({

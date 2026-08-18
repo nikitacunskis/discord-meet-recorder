@@ -1,6 +1,7 @@
-// Mikrofona atļaujas lapa: paplašinājuma izcelsmei (chrome-extension://) ir
-// sava atļauja, neatkarīga no discord.com. Sānu panelis prompt parādīt nevar,
-// tāpēc atļauju paņemam šeit — pēc tam panelis mikrofonu dabū klusām.
+/**
+ * Microphone permission page. The side panel cannot render the getUserMedia
+ * permission prompt, so the chrome-extension origin grant is acquired here.
+ */
 const result = document.getElementById('result');
 
 document.getElementById('grant').addEventListener('click', async () => {

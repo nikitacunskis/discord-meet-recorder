@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Lokāla Discord zvana transkripcija ar runātāju atribūciju.
+"""Local Discord call transcription with speaker attribution.
 
-Lietošana:
-    python3 tools/transcribe.py ~/Downloads/discord-call-20260817-1758.webm [--model small]
+Usage:
+    python3 tools/transcribe.py <recording>.webm [--model NAME] [--language XX]
+                                [--report --claude <instance>]
 
-Prasa: ffmpeg un whisper-cli (brew install ffmpeg whisper-cpp).
-Blakus .webm failam jābūt tāda paša nosaukuma .speakers.json failam.
-Rezultāts: <base>.transcript.md ar rindām "[HH:MM:SS] vārds: teksts".
+Requires ffmpeg and whisper-cli on PATH. A matching <base>.speakers.json must
+sit next to the audio file. Outputs: SQLite rows (tools/dvtdb.py),
+<base>.transcript.md, and optionally <base>.report.md via `claude -p`.
+Prepends Homebrew and ~/.local/bin to PATH: native hosts inherit a minimal
+environment from Chrome.
 """
 from __future__ import annotations
 import argparse
@@ -19,8 +22,6 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-# Native hosts (un cron u.c.) manto minimālu PATH bez brew — piespiežam ceļus,
-# kur dzīvo ffmpeg, whisper-cli un claude.
 os.environ["PATH"] = ":".join([
     "/opt/homebrew/bin",
     "/usr/local/bin",
@@ -29,11 +30,10 @@ os.environ["PATH"] = ":".join([
 ])
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import dvtdb  # noqa: E402
+import dvtdb
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{m}.bin"
-
 
 def ensure_model(name: str) -> Path:
     path = MODELS_DIR / f"ggml-{name}.bin"
@@ -47,28 +47,22 @@ def ensure_model(name: str) -> Path:
     tmp.rename(path)
     return path
 
-
 def run(cmd: list[str]) -> None:
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit(f"Komanda neizdevās: {' '.join(cmd)}\n{r.stderr[-2000:]}")
 
-
 def fmt(ms: float) -> str:
     s = int(ms // 1000)
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
-
-NOISE_MS = 700       # intervāli īsāki par šo = troksnis, ignorējam
-SAME_SPEAKER_GAP = 500  # viena runātāja blakus intervālus ar šādu pauzi sapludinām
-
+NOISE_MS = 700
+SAME_SPEAKER_GAP = 500
 
 def clean_intervals(intervals: list[dict]) -> list[dict]:
-    """Sapludina viena runātāja saraustītos intervālus, tad izmet trokšņus (<0.7s).
-
-    Secība ir svarīga: Discord indikators īstas runas laikā mirgo (daudz īsu
-    intervālu pēc kārtas) — vispirms sapludinām, lai īstā runa nepazūd, un
-    tikai tad metam ārā atlikušos īsos uzplaiksnījumus.
+    """Merge one speaker's flickering intervals (gap <= SAME_SPEAKER_GAP),
+    then drop intervals shorter than NOISE_MS. Merge must run first: the
+    Discord indicator flickers during real speech.
     """
     by_key: dict = {}
     for iv in sorted(intervals, key=lambda i: i["start_ms"]):
@@ -82,13 +76,13 @@ def clean_intervals(intervals: list[dict]) -> list[dict]:
            if iv["end_ms"] - iv["start_ms"] >= NOISE_MS]
     return sorted(out, key=lambda i: i["start_ms"])
 
-
 def attribute(seg_start: float, seg_end: float, intervals: list[dict]) -> str:
-    """Runātājs segmentam.
+    """Attribute a transcript segment to a speaker by interval overlap.
 
-    Pārklāšanās gadījumā: segmenta sākums pieder tam, kurš sāka runāt pirmais,
-    beigas — tam, kurš beidza pēdējais. Vienai izvades rindai ņemam dominējošo;
-    ja abi tur būtisku daļu, rādām "A → B".
+    Overlap heuristic: the segment start belongs to whoever started speaking
+    first, the end to whoever finished last; returns "A → B" when both hold a
+    significant share (>=25% each, dominant <75%), otherwise the dominant name.
+    Falls back to the nearest preceding speaker within 3 s, else "(?)".
     """
     per_name: dict = {}
     for iv in intervals:
@@ -121,13 +115,12 @@ def attribute(seg_start: float, seg_end: float, intervals: list[dict]) -> str:
         return f"{starter[0]} → {finisher[0]}"
     return top_name
 
-
 def build_blocks(intervals: list[dict], duration_ms: int,
                  pad: int = 400, gap: int = 2000, max_len: int = 60000) -> list[tuple]:
-    """Runas bloki no runātāju timeline: intervāli ± pad, sapludinot pauzes <= gap.
-
-    Klusums/mūzika starp blokiem netiek transkribēta vispār (tur Whisper
-    halucinē). Blokus, kas garāki par max_len, sagriež gabalos.
+    """Build speech blocks from the speaker timeline: intervals padded by
+    `pad` ms, gaps <= `gap` ms merged, blocks capped at `max_len` ms.
+    Silence/music between blocks is never transcribed (Whisper hallucination
+    source); each block gets independent language detection and no context.
     """
     if not intervals:
         return [(0, duration_ms)] if duration_ms else []
@@ -149,7 +142,6 @@ def build_blocks(intervals: list[dict], duration_ms: int,
         blocks.append((s, e))
     return blocks
 
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("audio", type=Path, nargs="+")
@@ -165,7 +157,6 @@ def main() -> None:
 
     for one in args.audio:
         process(one, args)
-
 
 def process(audio_arg: Path, args) -> None:
     audio = audio_arg.expanduser().resolve()
@@ -186,14 +177,9 @@ def process(audio_arg: Path, args) -> None:
           f"(troksnis <{NOISE_MS}ms izmests)")
     model = ensure_model(args.model)
 
-    # Audio griežam blokos pa runas posmiem (no runātāju timeline) un katru
-    # bloku transkribējam atsevišķi ar --no-context. Tas novērš divas Whisper
-    # kaites garos ierakstos: halucināciju cilpas (viens teikums atkārtojas
-    # minūtēm ilgi, jo iepriekšējais teksts baro nākamo logu) un valodas
-    # noslēgšanos (sākums angliski -> visu failu mal angliski).
     blocks = build_blocks(intervals, duration_ms)
 
-    segments = []  # (t0_ms, t1_ms, text) absolūtos ieraksta laikos
+    segments = []
     with tempfile.TemporaryDirectory() as td:
         wav = Path(td) / "audio.wav"
         print("Konvertēju audio …")
@@ -209,8 +195,6 @@ def process(audio_arg: Path, args) -> None:
                  "-l", args.language, "-oj", "-of", str(out), "-np", "-mc", "0"])
             json_file = out.with_suffix(".json")
             if not json_file.exists():
-                # whisper-cli nederīga karoga gadījumā izdrukā help ar rc=0 —
-                # neļaujam tam klusi apēst bloku
                 print(f"  bloks {i + 1}/{len(blocks)} NEIZDEVĀS (nav {json_file.name}), izlaižu")
                 continue
             trans = json.loads(json_file.read_text())["transcription"]
@@ -225,7 +209,6 @@ def process(audio_arg: Path, args) -> None:
     prev_text = None
     repeats = 0
     for t0, t1, text in segments:
-        # drošības tīkls pret atlikušajām cilpām: identisku rindu virknes sakļaujam
         if text == prev_text:
             repeats += 1
             if repeats >= 2:
@@ -237,7 +220,6 @@ def process(audio_arg: Path, args) -> None:
                      "start_dt_ms": int(t0), "end_dt_ms": int(t1),
                      "speaker_line": text})
 
-    # Primārā krātuve: vienotā SQLite (redaktora UI to lasa un labo caur native hostu)
     db = dvtdb.connect()
     rec_id = dvtdb.upsert_recording(db, base.name, str(audio.parent),
                                     data.get("started_at"), duration_ms)
@@ -272,8 +254,6 @@ def process(audio_arg: Path, args) -> None:
         )
         env = os.environ.copy()
         cmd = [args.claude, "-p"]
-        # claude-personal / claude-rgp ir zsh aliasi, ne binārijs — tulkojam
-        # uz CLAUDE_CONFIG_DIR, tāpat kā to dara alias definīcija .zshrc failā
         m = re.fullmatch(r"claude-([\w.-]+)", args.claude)
         if m:
             env["CLAUDE_CONFIG_DIR"] = str(Path.home() / f".claude-{m.group(1)}")
@@ -286,7 +266,6 @@ def process(audio_arg: Path, args) -> None:
         report_file = Path(str(base) + ".report.md")
         report_file.write_text(r.stdout)
         print(f"Gatavs: {report_file}")
-
 
 if __name__ == "__main__":
     main()

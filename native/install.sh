@@ -11,7 +11,6 @@ case "$(uname -s)" in
     HOST_DIRS=("$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts")
     ;;
   Linux)
-    # Chrome and Chromium keep separate host registries — register in the ones that exist
     HOST_DIRS=()
     for d in "$HOME/.config/google-chrome" "$HOME/.config/chromium"; do
       [ -d "$d" ] && HOST_DIRS+=("$d/NativeMessagingHosts")

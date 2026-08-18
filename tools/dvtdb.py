@@ -1,11 +1,13 @@
-"""Vienota SQLite krātuve Discord zvanu transkriptiem.
+"""Single SQLite store for Discord call transcripts.
 
-Shēma (pēc lietotāja specifikācijas):
-  recordings(id, base, dir, start_dt, end_dt)
-  text_lines(id, recording_id, speaker_name, speaker_line, start_dt_ms, end_dt_ms, edited)
+Schema:
+  recordings(id, base, dir, title, start_dt, end_dt)
+  text_lines(id, recording_id, speaker_name, speaker_line,
+             start_dt_ms, end_dt_ms, edited)
 
-`base`/`dir` ir tehniskās kolonnas failu atrašanai; `edited` pasargā ar roku
-labotās rindas no pārrakstīšanas atkārtotā transkripcijā.
+`base`/`dir` locate the files on disk; `edited=1` marks hand-edited lines that
+re-transcription must not overwrite. connect() creates the schema and migrates
+the legacy (recordings/utterances) layout in place.
 """
 from __future__ import annotations
 import sqlite3
@@ -13,7 +15,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "recordings" / "dvt.sqlite"
-
 
 def _migrate_legacy(db: sqlite3.Connection) -> None:
     names = {r["name"] for r in db.execute(
@@ -44,7 +45,6 @@ def _migrate_legacy(db: sqlite3.Connection) -> None:
                     u["start_ms"], u["end_ms"], u.get("edited", 0)))
     db.commit()
 
-
 def _create(db: sqlite3.Connection) -> None:
     db.execute("""CREATE TABLE IF NOT EXISTS recordings(
         id INTEGER PRIMARY KEY,
@@ -62,7 +62,6 @@ def _create(db: sqlite3.Connection) -> None:
         edited INTEGER NOT NULL DEFAULT 0)""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_lines ON text_lines(recording_id, start_dt_ms)")
 
-
 def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(db_path)
@@ -76,9 +75,8 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
         db.commit()
     return db
 
-
 def set_title(db, base: str, title: str, rec_dir: str | None = None) -> None:
-    """Lietotāja dotais nosaukums. `base` (ID) paliek nemainīgs — tikai BE."""
+    """Set the user-given title; `base` (the ID) never changes."""
     if db.execute("SELECT 1 FROM recordings WHERE base=?", (base,)).fetchone() is None:
         db.execute("INSERT INTO recordings(base, dir, title) VALUES(?,?,?)",
                    (base, rec_dir or "", title or None))
@@ -86,11 +84,9 @@ def set_title(db, base: str, title: str, rec_dir: str | None = None) -> None:
         db.execute("UPDATE recordings SET title=? WHERE base=?", (title or None, base))
     db.commit()
 
-
 def titles(db) -> dict:
     return {r["base"]: r["title"] for r in db.execute(
         "SELECT base, title FROM recordings WHERE title IS NOT NULL")}
-
 
 def upsert_recording(db, base: str, rec_dir: str, start_dt: str | None,
                      duration_ms: int | None) -> int:
@@ -109,9 +105,8 @@ def upsert_recording(db, base: str, rec_dir: str, start_dt: str | None,
     db.commit()
     return db.execute("SELECT id FROM recordings WHERE base=?", (base,)).fetchone()["id"]
 
-
 def replace_lines(db, recording_id: int, rows: list[dict]) -> None:
-    """Pārraksta transkriptu, saglabājot rindas, ko lietotājs labojis ar roku."""
+    """Replace a recording's transcript, preserving rows with edited=1."""
     db.execute("DELETE FROM text_lines WHERE recording_id=? AND edited=0", (recording_id,))
     db.executemany(
         """INSERT INTO text_lines(recording_id, speaker_name, speaker_line,
@@ -120,16 +115,13 @@ def replace_lines(db, recording_id: int, rows: list[dict]) -> None:
           r["start_dt_ms"], r["end_dt_ms"]) for r in rows])
     db.commit()
 
-
 def get_recording(db, base: str):
     return db.execute("SELECT * FROM recordings WHERE base=?", (base,)).fetchone()
-
 
 def get_lines(db, recording_id: int) -> list[dict]:
     return [dict(r) for r in db.execute(
         "SELECT * FROM text_lines WHERE recording_id=? ORDER BY start_dt_ms, id",
         (recording_id,))]
-
 
 def update_line(db, line_id: int, speaker_name: str, start_dt_ms: int,
                 end_dt_ms: int, speaker_line: str) -> None:
@@ -138,12 +130,10 @@ def update_line(db, line_id: int, speaker_name: str, start_dt_ms: int,
                (speaker_name, start_dt_ms, end_dt_ms, speaker_line, line_id))
     db.commit()
 
-
 def delete_recording(db, base: str) -> None:
-    """Izdzēš ierakstu; text_lines aiziet līdzi caur ON DELETE CASCADE."""
+    """Delete a recording; text_lines follow via ON DELETE CASCADE."""
     db.execute("DELETE FROM recordings WHERE base=?", (base,))
     db.commit()
-
 
 def delete_line(db, line_id: int) -> None:
     db.execute("DELETE FROM text_lines WHERE id=?", (line_id,))

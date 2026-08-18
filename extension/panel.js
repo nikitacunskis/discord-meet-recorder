@@ -1,7 +1,11 @@
-// Discord Call Recorder — sānu panelis.
-// Ieraksta taba audio (+ mikrofonu) un vāc runātāju notikumus no content.js.
-// Stop -> native hosts saglabā mapē un pats transkribē; fallback: Downloads.
-
+/**
+ * Side panel controller.
+ * Records tab audio (tabCapture, getDisplayMedia fallback) mixed with the
+ * microphone through a 1.8x gain node (MediaRecorder, audio/webm;codecs=opus),
+ * collects the speaker timeline from content.js, and streams the result to the
+ * native host `com.dvt.recorder` (storage + transcription). Falls back to plain
+ * Downloads when the host is unavailable.
+ */
 const els = {
   sensor: document.getElementById('sensor'),
   native: document.getElementById('native'),
@@ -19,15 +23,14 @@ let stream = null;
 let micStream = null;
 let audioCtx = null;
 let chunks = [];
-let events = []; // {name, userId, speaking, t_ms} relatīvi pret ieraksta sākumu
+let events = [];
 let t0 = 0;
 let timerInterval = null;
-let lastFiles = null; // {audio: Blob, json: Blob, srt: Blob, base: string}
-const speakingNow = new Map(); // key -> name
-let participants = []; // visi dalībnieki no pēdējā pong
+let lastFiles = null;
+const speakingNow = new Map();
+let participants = [];
 let micOn = true;
 
-// Statusa rindas rādām TIKAI tad, ja kaut kas nav kārtībā.
 function statusline(el, problemText) {
   if (problemText) {
     el.textContent = problemText;
@@ -36,8 +39,6 @@ function statusline(el, problemText) {
     el.hidden = true;
   }
 }
-
-// ---------- runātāju notikumi no content.js ----------
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (!msg || typeof msg !== 'object') return;
@@ -60,7 +61,6 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-// Dalībnieku režģis: visi pelēki, runājošie zaļi.
 function renderParticipants() {
   const speaking = new Set(speakingNow.values());
   const names = participants.length ? participants : [...speaking];
@@ -87,10 +87,8 @@ function logLine(text, cls) {
   while (els.log.childElementCount > 500) els.log.lastChild.remove();
 }
 
-// ---------- iestatījumi ----------
-
 const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setAuto', 'setOutDir'];
-const MODEL = 'large-v3-turbo'; // vienīgā opcija
+const MODEL = 'large-v3-turbo';
 
 async function loadSettings() {
   const stored = await chrome.storage.local.get(['dvtSettings', 'dvtMicOn']);
@@ -124,14 +122,12 @@ for (const id of SETTINGS_KEYS)
   });
 loadSettings().then(() => I18N.init().then(renderMicBtn));
 
-// Mapes selektors caur native hostu (macOS choose folder dialogs)
 document.getElementById('dirBtn').innerHTML = DVT_ICONS.folder;
 document.querySelector('.search-icon').innerHTML = DVT_ICONS.search;
 document.getElementById('dirBtn').addEventListener('click', () => {
   nativePort && nativePort.postMessage({ type: 'pick-dir' });
 });
 
-// Mikrofona slēdzis: vai ierakstā iet arī tava balss
 function renderMicBtn() {
   els.micBtn.innerHTML = DVT_ICONS.mic;
   els.micBtn.classList.toggle('off', !micOn);
@@ -142,10 +138,6 @@ els.micBtn.addEventListener('click', () => {
   chrome.storage.local.set({ dvtMicOn: micOn });
   renderMicBtn();
 });
-
-// ---------- mikrofona ierīce + līmeņa mērītājs ----------
-// Chrome "default" ievade bieži NAV tas mikrofons, ko lieto Discord
-// (Continuity/iPhone, virtuālās ierīces kā Krisp) — tad ierakstā ir šņākoņa.
 
 async function populateMics() {
   const sel = document.getElementById('setMicDev');
@@ -167,7 +159,7 @@ async function populateMics() {
   if ([...sel.options].some((o) => o.value === want)) sel.value = want;
 }
 navigator.mediaDevices.addEventListener('devicechange', populateMics);
-setTimeout(populateMics, 300); // pēc i18n init
+setTimeout(populateMics, 300);
 
 function micConstraints() {
   const dev = document.getElementById('setMicDev').value;
@@ -201,7 +193,6 @@ function startMeter(s) {
       silentSince = Date.now();
     } else if (!silentWarned && Date.now() - silentSince > 6000 &&
                recorder && recorder.state === 'recording') {
-      // 6s pilnīga klusuma ieraksta laikā = gandrīz droši nepareizā ierīce
       silentWarned = true;
       logLine(t('micSilent'));
       setStatus(t('micSilent'), true);
@@ -220,7 +211,6 @@ function stopMeter() {
   if (m) m.hidden = true;
 }
 
-// Ierīces maiņa -> 4 s dzīvais tests ar mērītāju (ja šobrīd neierakstām)
 let micTestStream = null;
 document.getElementById('setMicDev').addEventListener('change', async () => {
   if (recorder && recorder.state === 'recording') return;
@@ -238,7 +228,6 @@ document.getElementById('setMicDev').addEventListener('change', async () => {
   }
 });
 
-
 function collectSettings() {
   return {
     claude: document.getElementById('setClaude').value,
@@ -249,8 +238,6 @@ function collectSettings() {
     outDir: document.getElementById('setOutDir').value.trim() || null,
   };
 }
-
-// ---------- native messaging host ----------
 
 const NATIVE_HOST = 'com.dvt.recorder';
 let nativePort = null;
@@ -294,7 +281,7 @@ els.search.addEventListener('input', () => {
 
 function onNativeMsg(msg) {
   if (msg.type === 'pong') {
-    statusline(els.native, null); // viss kārtībā -> neko nerādām
+    statusline(els.native, null);
   } else if (msg.type === 'saved') {
     logLine(t('savedPrefix') + msg.path);
     setStatus(t('savedFolder'));
@@ -316,8 +303,6 @@ function onNativeMsg(msg) {
     }
   }
 }
-
-// ---------- ierakstu saraksts (kartītes + numurēta paginācija) ----------
 
 function renderRecList(msg) {
   const el = document.getElementById('recList');
@@ -420,7 +405,6 @@ async function sendToNative(files) {
   });
 }
 
-// Events bloks: paslēpts pēc noklusējuma, Rādīt/Slēpt poga
 const logToggle = document.getElementById('logToggle');
 logToggle.addEventListener('click', () => {
   els.log.hidden = !els.log.hidden;
@@ -430,11 +414,7 @@ logToggle.addEventListener('click', () => {
 
 connectNative();
 
-// Statusu auto-atsvaidze (⏳ -> ✓), arī ja 'done' pienāk citam savienojumam.
 setInterval(requestList, 10000);
-
-// ---------- sensora ping ----------
-// content.js ielādējas agrāk par paneli — pingojam; kļūdas rādām, OK klusējam.
 
 async function pingSensor() {
   try {
@@ -460,8 +440,6 @@ async function pingSensor() {
 pingSensor();
 setInterval(pingSensor, 3000);
 
-// ---------- ieraksts ----------
-
 els.recBtn.addEventListener('click', () => {
   if (recorder && recorder.state === 'recording') stopRecording();
   else startRecording();
@@ -485,8 +463,6 @@ async function captureTabAudio(tab) {
     });
     return { stream: s, viaTabCapture: true };
   } catch (e) {
-    // Rezerves ceļš: Chrome koplietošanas dialogs. Izvēlies cilni "Chrome Tab" →
-    // Discord tabu un ieslēdz "Also share tab audio".
     setStatus(t('shareHint'));
     const display = await navigator.mediaDevices.getDisplayMedia({
       video: true,
@@ -514,18 +490,15 @@ async function startRecording() {
       if (recorder && recorder.state === 'recording') stopRecording();
     });
 
-    // Taba audio satur tikai PĀRĒJOS runātājus — tava balss tabā neskan,
-    // tāpēc to ņemam no mikrofona un miksējam vienā celiņā.
     micStream = null;
     if (micOn) {
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
         startMeter(micStream);
-        populateMics(); // pēc piekļuves parādās ierīču nosaukumi
+        populateMics();
       } catch (e) {
         logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
         if (e.name === 'NotAllowedError') {
-          // panelī atļaujas prompt nerādās — to paņem atsevišķā paplašinājuma lapā
           logLine(t('micPermOpening'));
           chrome.tabs.create({ url: chrome.runtime.getURL('mic.html') });
         }
@@ -537,15 +510,12 @@ async function startRecording() {
     const tabSrc = audioCtx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
     tabSrc.connect(mixDest);
     if (micStream) {
-      // mikrofons parasti ir krietni klusāks par taba skaņu — paceļam
       const micGain = audioCtx.createGain();
       micGain.gain.value = 1.8;
       audioCtx.createMediaStreamSource(micStream).connect(micGain);
       micGain.connect(mixDest);
     }
 
-    // tabCapture apklusina tabu — laižam TIKAI taba skaņu atpakaļ skaļruņos
-    // (mikrofonu ne, citādi dzirdētu pats sevi ar aizturi).
     if (cap.viaTabCapture) tabSrc.connect(audioCtx.destination);
 
     chunks = [];
@@ -556,7 +526,6 @@ async function startRecording() {
     recorder.onstop = onRecorderStop;
     recorder.start(1000);
 
-    // ja kāds jau runā ieraksta sākumā, atzīmējam no 0
     for (const [key, name] of speakingNow) {
       events.push({ name, userId: key === name ? null : key, speaking: true, t_ms: 0 });
     }
@@ -588,7 +557,6 @@ function stopRecording() {
 
 function onRecorderStop() {
   const durMs = Date.now() - t0;
-  // aizveram vaļējos intervālus ieraksta beigās
   for (const [key, name] of speakingNow) {
     events.push({ name, userId: key === name ? null : key, speaking: false, t_ms: durMs });
   }
@@ -643,9 +611,6 @@ function cleanup() {
   els.timer.textContent = '';
 }
 
-// ---------- eksports ----------
-
-// No on/off notikumiem saliek [{name, userId, start_ms, end_ms}]
 function buildIntervals(evts, durMs) {
   const open = new Map();
   const out = [];
@@ -657,7 +622,7 @@ function buildIntervals(evts, durMs) {
     } else if (open.has(key)) {
       const s = open.get(key);
       open.delete(key);
-      if (e.t_ms - s.t_ms >= 150) // izmetam <150ms sprakšķus
+      if (e.t_ms - s.t_ms >= 150)
         out.push({ name: s.name, userId: s.userId, start_ms: s.t_ms, end_ms: e.t_ms });
     }
   }
@@ -682,8 +647,6 @@ function download(blob, filename) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 30000);
 }
-
-// ---------- helpers ----------
 
 function setStatus(text, isErr) {
   els.status.textContent = text;

@@ -1,6 +1,8 @@
-// DVT redaktors: transkripta rindas no SQLite (caur native hostu), klikšķis
-// uz rindas atskaņo fragmentu, ✎ ļauj labot runātāju/laikus/tekstu ar roku.
-
+/**
+ * Transcript editor page (?base=<recording>).
+ * Loads lines and audio from the native host (SQLite-backed), plays the audio
+ * fragment behind a clicked row, persists manual edits/deletes via the host.
+ */
 const base = new URLSearchParams(location.search).get('base');
 const els = {
   title: document.getElementById('title'),
@@ -22,11 +24,9 @@ function colorFor(name) {
 
 let utts = [];
 let audioChunks = [];
-let stopAt = null; // ms; fragmenta beigas, kur apturēt
-let knownDurMs = 0; // rezerves ilgums, ja webm metadatos tā nav
+let stopAt = null;
+let knownDurMs = 0;
 
-// audio.duration MediaRecorder failiem mēdz būt Infinity — tad izmantojam
-// rindu beigu laiku kā ilgumu
 function durMs() {
   const d = els.audio.duration;
   return isFinite(d) && d > 0 ? d * 1000 : knownDurMs;
@@ -43,7 +43,7 @@ port.onMessage.addListener((msg) => {
   if (msg.type === 'recording') {
     if (msg.title) {
       els.title.textContent = msg.title;
-      els.title.title = msg.base; // ID paliek BE — redzams tikai tooltip
+      els.title.title = msg.base;
       document.title = msg.title;
     }
     utts = msg.lines;
@@ -63,14 +63,11 @@ port.onMessage.addListener((msg) => {
   } else if (msg.type === 'audio-missing') {
     els.status.textContent += t('edAudioMissing');
   } else if (msg.type === 'updated' || msg.type === 'deleted') {
-    // apstiprināts — nekas nav jādara, lokālais stāvoklis jau atjaunots
   } else if (msg.type === 'error') {
     els.status.textContent = t('edError') + msg.message;
   }
 });
 port.postMessage({ type: 'load', base });
-
-// ---------- renderēšana ----------
 
 function fmt(ms) {
   const s = Math.floor(ms / 1000);
@@ -85,7 +82,7 @@ function render() {
     const row = document.createElement('div');
     row.className = 'row';
     row.dataset.id = u.id;
-    if (u.start_dt_ms < prevEnd) row.classList.add('interrupt'); // pārtraukums -> atkāpe
+    if (u.start_dt_ms < prevEnd) row.classList.add('interrupt');
     prevEnd = Math.max(prevEnd, u.end_dt_ms);
 
     const speaker = document.createElement('span');
@@ -130,8 +127,6 @@ function render() {
   }
 }
 
-// ---------- labošana ----------
-
 function parseTime(str) {
   const parts = str.trim().split(':').map(Number);
   if (parts.some(isNaN)) return null;
@@ -170,8 +165,6 @@ function startEdit(row, u) {
   textIn.focus();
 }
 
-// ---------- atskaņošana ----------
-
 function playFragment(u) {
   if (!els.audio.src) return;
   stopAt = u.end_dt_ms;
@@ -181,7 +174,7 @@ function playFragment(u) {
 
 els.playBtn.addEventListener('click', () => {
   if (!els.audio.src) return;
-  stopAt = null; // brīvā atskaņošana bez fragmenta robežas
+  stopAt = null;
   if (els.audio.paused) els.audio.play();
   else els.audio.pause();
 });
@@ -190,8 +183,6 @@ els.audio.addEventListener('play', () => (els.playBtn.innerHTML = DVT_ICONS.paus
 els.playBtn.innerHTML = DVT_ICONS.play;
 els.audio.addEventListener('pause', () => (els.playBtn.innerHTML = DVT_ICONS.play));
 
-// standarta triks Infinity-duration webm failiem: aizsēkojam līdz beigām,
-// lai pārlūks izrēķina īsto ilgumu, tad atgriežamies sākumā
 els.audio.addEventListener('loadedmetadata', () => {
   if (els.audio.duration !== Infinity) return;
   const back = () => {

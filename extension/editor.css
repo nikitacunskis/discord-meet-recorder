@@ -1,4 +1,3 @@
-/* Tēma seko pārlūkam: gaišās vērtības :root, tumšās @media blokā. */
 :root {
   --bg: #f4f5f7;
   --surface: #ffffff;
@@ -90,7 +89,6 @@ footer#player {
 #seek { flex: 1; accent-color: var(--text); height: 6px; }
 #clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
 
-/* SVG ikonas pogās */
 button svg { display: block; margin: auto; }
 #playBtn svg { width: 24px; height: 24px; }
 .tools button svg { width: 15px; height: 15px; }
