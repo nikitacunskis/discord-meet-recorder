@@ -1,0 +1,53 @@
+body {
+  font: 13px/1.45 -apple-system, system-ui, sans-serif;
+  background: #1e1f22;
+  color: #dbdee1;
+  margin: 0;
+  padding: 12px;
+}
+h1 { font-size: 15px; margin: 0 0 10px; }
+h2 { font-size: 12px; text-transform: uppercase; color: #949ba4; margin: 14px 0 6px; }
+.row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.muted { color: #949ba4; }
+button {
+  background: #4e5058; color: #fff; border: 0; border-radius: 4px;
+  padding: 7px 12px; cursor: pointer; font-size: 13px;
+}
+button:hover { background: #6d6f78; }
+button:disabled { opacity: 0.4; cursor: default; }
+#startBtn { background: #248046; }
+#startBtn:hover:not(:disabled) { background: #1a6334; }
+#stopBtn:not(:disabled) { background: #da373c; }
+.rec #status { color: #f23f43; font-weight: 600; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+.chip {
+  background: #23a55a; color: #fff; border-radius: 10px;
+  padding: 2px 10px; font-size: 12px;
+}
+#log {
+  max-height: 45vh; overflow-y: auto; font-size: 12px;
+  border-top: 1px solid #3f4147;
+}
+#log div { padding: 2px 0; border-bottom: 1px solid #2b2d31; }
+#log .on { color: #23a55a; }
+#log .off { color: #949ba4; }
+#sensor.ok { color: #23a55a; }
+.settings { display: flex; flex-direction: column; gap: 8px; }
+.settings label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.settings select {
+  background: #1e1f22; color: #dbdee1; border: 1px solid #3f4147;
+  border-radius: 4px; padding: 4px 6px; font-size: 12px;
+}
+.settings .check { justify-content: flex-start; }
+.settings input[type="text"] {
+  background: #1e1f22; color: #dbdee1; border: 1px solid #3f4147;
+  border-radius: 4px; padding: 4px 6px; font-size: 12px; flex: 1;
+}
+#native.ok { color: #23a55a; }
+#recList { font-size: 12px; }
+#recList div { padding: 2px 0; border-bottom: 1px solid #2b2d31; }
+#cmd {
+  background: #111214; border: 1px solid #3f4147; border-radius: 4px;
+  padding: 8px; font-size: 11px; white-space: pre-wrap; word-break: break-all;
+  user-select: all;
+}

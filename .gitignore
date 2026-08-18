@@ -1,0 +1,15 @@
+# lieli modeļu faili (lejupielādējas paši ar transcribe.py)
+models/
+
+# Python kešs
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+
+# ieraksti un DB — personiski dati, ne kods
+recordings/

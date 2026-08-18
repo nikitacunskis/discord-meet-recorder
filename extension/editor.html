@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="utf-8" />
+  <title>DVT redaktors</title>
+  <link rel="stylesheet" href="editor.css" />
+</head>
+<body>
+  <header>
+    <h1 id="title">Ielādēju…</h1>
+    <span id="status" class="muted"></span>
+  </header>
+
+  <main id="list"></main>
+
+  <footer id="player">
+    <button id="playBtn" title="Atskaņot / pauzēt">▶</button>
+    <input type="range" id="seek" min="0" max="1000" value="0" />
+    <span id="clock">00:00:00 / 00:00:00</span>
+  </footer>
+
+  <audio id="audio"></audio>
+  <script src="editor.js"></script>
+</body>
+</html>
