@@ -29,6 +29,8 @@ Then it goes further:
 
 ## Installation (step-by-step)
 
+> Windows user? See [INSTALL_WINDOWS.md](INSTALL_WINDOWS.md).
+
 ### Step 1 — Clone the repository
 
 ```bash
