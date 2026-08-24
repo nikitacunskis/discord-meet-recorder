@@ -11,12 +11,20 @@
     <span id="status" class="muted"></span>
   </header>
 
-  <section id="reportBlock" hidden>
-    <h2 data-i18n="edReport">Sapulces reports</h2>
-    <div id="reportBody"></div>
-  </section>
+  <div id="content">
+    <nav id="threadNav" hidden>
+      <h2 data-i18n="edThreads">Tēmas</h2>
+      <ul id="threadNavList"></ul>
+    </nav>
+    <div id="mainCol">
+      <section id="reportBlock" hidden>
+        <h2 data-i18n="edReport">Sapulces reports</h2>
+        <div id="reportBody"></div>
+      </section>
 
-  <main id="list"></main>
+      <main id="list"></main>
+    </div>
+  </div>
 
   <footer id="player">
     <button id="playBtn" title="Play / pause"></button>

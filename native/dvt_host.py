@@ -17,6 +17,9 @@ import struct
 import subprocess
 import sys
 import threading
+import time
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -36,16 +39,51 @@ DEFAULT_DIR = PROJECT / "recordings"
 TRANSCRIBE = PROJECT / "tools" / "transcribe.py"
 
 sys.path.insert(0, str(PROJECT / "tools"))
+import ai_providers
 import dvtdb
+
+try:
+    import live
+except Exception:
+    live = None  # live transcription is optional; recording must never break
 
 _send_lock = threading.Lock()
 
+# Chrome kills the native-messaging port when a single host→extension message
+# exceeds 1 MB; keep every serialized message well below that.
+MSG_MAX_BYTES = 512 * 1024
+
+def iter_batches(items: list, budget: int = MSG_MAX_BYTES):
+    """Yield slices of items whose JSON-encoded size stays under budget."""
+    batch, size = [], 0
+    for it in items:
+        n = len(json.dumps(it).encode()) + 2  # +2 for the ", " separator
+        if batch and size + n > budget:
+            yield batch
+            batch, size = [], 0
+        batch.append(it)
+        size += n
+    if batch:
+        yield batch
+
 def send(obj) -> None:
     data = json.dumps(obj).encode()
-    with _send_lock:
-        sys.stdout.buffer.write(struct.pack("<I", len(data)))
-        sys.stdout.buffer.write(data)
-        sys.stdout.buffer.flush()
+    try:
+        with _send_lock:
+            sys.stdout.buffer.write(struct.pack("<I", len(data)))
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+    except Exception:
+        pass  # panel gone (pipe closed) — keep finalization/transcription alive
+
+def log_error(base_dir: Path) -> None:
+    """Append the current exception traceback to <base_dir>/dvt_host.log."""
+    try:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        with open(base_dir / "dvt_host.log", "a") as f:
+            f.write(time.strftime("[%Y-%m-%d %H:%M:%S]\n") + traceback.format_exc() + "\n")
+    except Exception:
+        pass
 
 def read_msg():
     raw = sys.stdin.buffer.read(4)
@@ -60,10 +98,16 @@ def run_transcribe(audio: Path, settings: dict) -> None:
     lang = settings.get("language", "auto")
     if lang != "auto":
         cmd += ["--language", lang]
-    sections = [f for f in ("report", "decisions", "actions") if settings.get(f)]
-    if sections:
-        cmd += ["--" + s for s in sections]
-        cmd += ["--claude", settings.get("claude", "claude"),
+    sections = [f for f in ("report", "decisions", "actions", "threads")
+                if settings.get(f)]
+    cmd += ["--" + s for s in sections]
+    if settings.get("fixConvo"):
+        cmd.append("--fix-convo")
+    if settings.get("autoTitle"):
+        cmd.append("--set-title")
+    if sections or settings.get("fixConvo") or settings.get("autoTitle"):
+        cmd += ["--ai-provider", settings.get("aiProvider", "claude"),
+                "--ai-instance", settings.get("aiInstance", ""),
                 "--report-lang", settings.get("uiLang", "en")]
     send({"type": "log", "line": "$ " + " ".join(cmd)})
     try:
@@ -96,6 +140,8 @@ def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
         db = dvtdb.connect()
         title_map = dvtdb.titles(db)
         reports = dvtdb.report_bases(db)
+        status_map = {r["base"]: r["status"] for r in db.execute(
+            "SELECT base, status FROM recordings WHERE status IS NOT NULL")}
         matched = _search_bases(db, q) if q else None
         db.close()
         for f in sorted(found, key=lambda p: p.stem, reverse=True):
@@ -108,6 +154,7 @@ def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
                 "title": title_map.get(f.stem),
                 "transcript": Path(b + ".transcript.md").exists(),
                 "report": f.stem in reports,
+                "status": status_map.get(f.stem),
             })
     total = len(items)
     pages = max(1, -(-total // page_size))
@@ -157,15 +204,29 @@ def handle_load(msg, base_dir: Path) -> None:
     lines = dvtdb.get_lines(db, rec_id) if rec_id is not None else []
     rec = dvtdb.get_recording(db, base)
     report = dvtdb.get_report(db, rec_id) if rec_id is not None else None
+    threads = dvtdb.get_threads(db, rec_id) if rec_id is not None else []
+    audio = find_audio(base, base_dir)
+    # An existing .live.pcm sidecar means a live session is writing preview
+    # lines right now — the editor keeps polling (linesOnly) while it lasts.
+    live_now = bool(audio and audio.with_suffix(".live.pcm").exists())
+    # Chunked reply: metadata first, then the lines in size-bounded batches,
+    # then an end marker — a 3–4 h call easily exceeds Chrome's 1 MB cap.
     send({"type": "recording", "base": base,
           "title": rec["title"] if rec else None,
           "start_dt": rec["start_dt"] if rec else None,
           "end_dt": rec["end_dt"] if rec else None,
+          "status": rec["status"] if rec else None,
           "report": report,
-          "lines": lines})
+          "threads": threads,
+          "live": live_now,
+          "line_count": len(lines)})
+    for batch in iter_batches(lines):
+        send({"type": "recording-lines", "base": base, "lines": batch})
+    send({"type": "recording-end", "base": base})
     db.close()
 
-    audio = find_audio(base, base_dir)
+    if msg.get("linesOnly"):
+        return
     if not audio:
         send({"type": "audio-missing"})
         return
@@ -175,24 +236,80 @@ def handle_load(msg, base_dir: Path) -> None:
             send({"type": "audio-chunk", "data": base64.b64encode(chunk).decode()})
     send({"type": "audio-end"})
 
+def finalize_recording(out, audio_path: Path, outdir: Path, base: str,
+                       speakers: str | None, srt: str | None,
+                       prompt: str | None, settings: dict) -> None:
+    """Close the audio, remux, write sidecars, launch transcription.
+
+    Shared by the 'finish' handler and the EOF path (panel closed
+    mid-recording): finalizes whatever audio and speaker data exists.
+    """
+    out.close()
+    try:
+        tmp = audio_path.with_suffix(".fixed.webm")
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i",
+                            str(audio_path), "-c", "copy", str(tmp)],
+                           capture_output=True)
+        if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
+            tmp.replace(audio_path)
+        elif tmp.exists():
+            tmp.unlink()
+    except Exception:
+        pass
+    base_path = str(outdir / base)
+    if speakers is not None:
+        Path(base_path + ".speakers.json").write_text(speakers)
+    if srt is not None:
+        Path(base_path + ".speakers.srt").write_text(srt)
+    if prompt:
+        Path(base_path + ".prompt.txt").write_text(prompt)
+    send({"type": "saved", "path": str(audio_path)})
+    auto = settings.get("autoTranscribe", True)
+    try:
+        # User pressed stop: stamp end_dt and advance the status machine —
+        # 'transcribing' while the pipeline runs, 'done' when it never will.
+        db = dvtdb.connect()
+        dvtdb.finish_recording(db, base, datetime.now(timezone.utc).isoformat(),
+                               "transcribing" if auto else "done")
+        db.close()
+    except Exception:
+        log_error(outdir)
+    if auto:
+        # Non-daemon: the pipeline must survive main() returning on EOF.
+        threading.Thread(target=run_transcribe,
+                         args=(audio_path, settings)).start()
+
 def main() -> None:
     out = None
     audio_path = None
     settings: dict = {}
     base_dir = DEFAULT_DIR
     outdir = DEFAULT_DIR
-    while True:
-        msg = read_msg()
-        if msg is None:
-            break
+    rec_base = None
+    speakers = None
+    srt = None
+    live_session = None
+
+    def stop_live() -> None:
+        nonlocal live_session
+        if live_session is not None:
+            ls, live_session = live_session, None
+            try:
+                ls.finish()
+            except Exception:
+                log_error(base_dir)
+
+    def handle(msg) -> None:
+        nonlocal out, audio_path, settings, base_dir, outdir
+        nonlocal rec_base, speakers, srt, live_session
         t = msg.get("type")
         if t == "ping":
             send({"type": "pong", "dir": str(base_dir)})
-        elif t == "claude-instances":
-            home = Path.home()
-            items = ["claude"] if (home / ".claude").is_dir() else []
-            items += sorted(d.name[1:] for d in home.glob(".claude-*") if d.is_dir())
-            send({"type": "claude-instances", "items": items or ["claude"]})
+        elif t == "ai-providers":
+            # Providers whose CLI is not installed are simply omitted — a
+            # normal setup, not an error. An empty list makes the panel hide
+            # the whole AI section and never request AI stages.
+            send({"type": "ai-providers", "providers": ai_providers.detect()})
         elif t == "load":
             try:
                 handle_load(msg, Path(msg.get("dir") or base_dir).expanduser())
@@ -251,32 +368,65 @@ def main() -> None:
             outdir.mkdir(parents=True, exist_ok=True)
             audio_path = outdir / (msg["base"] + ".webm")
             out = open(audio_path, "wb")
-        elif t == "chunk" and out:
-            out.write(base64.b64decode(msg["data"]))
-        elif t == "finish" and out:
-            out.close()
-            out = None
             try:
-                tmp = audio_path.with_suffix(".fixed.webm")
-                r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i",
-                                    str(audio_path), "-c", "copy", str(tmp)],
-                                   capture_output=True)
-                if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
-                    tmp.replace(audio_path)
-                elif tmp.exists():
-                    tmp.unlink()
+                # Status machine entry: the row exists from the very first
+                # second of recording (status='recording').
+                db = dvtdb.connect()
+                dvtdb.start_recording(db, msg["base"], str(outdir),
+                                      datetime.now(timezone.utc).isoformat())
+                db.close()
             except Exception:
-                pass
-            base = str(outdir / msg["base"])
-            Path(base + ".speakers.json").write_text(msg["speakers"])
-            Path(base + ".speakers.srt").write_text(msg["srt"])
-            if msg.get("prompt"):
-                Path(base + ".prompt.txt").write_text(msg["prompt"])
-            send({"type": "saved", "path": str(audio_path)})
-            if settings.get("autoTranscribe", True):
-                threading.Thread(target=run_transcribe,
-                                 args=(audio_path, settings),
-                                 daemon=True).start()
+                log_error(base_dir)  # recording must never break on DB issues
+            rec_base = msg["base"]
+            speakers = None
+            srt = None
+            stop_live()  # stray session from an aborted recording
+            if live is not None and settings.get("live"):
+                try:
+                    live_session = live.LiveTranscriber(audio_path, settings, send)
+                except Exception:
+                    live_session = None
+                    log_error(base_dir)
+        elif t == "chunk" and out:
+            data = base64.b64decode(msg["data"])
+            out.write(data)
+            if live_session is not None:
+                live_session.feed(data)
+        elif t == "events" and out:
+            speakers = msg.get("speakers")
+            srt = msg.get("srt")
+            if live_session is not None:
+                live_session.on_events(speakers, bool(msg.get("cut")))
+        elif t == "finish" and out:
+            fh, out = out, None
+            stop_live()
+            finalize_recording(fh, audio_path, outdir, msg["base"],
+                               msg["speakers"], msg["srt"], msg.get("prompt"),
+                               settings)
+
+    while True:
+        try:
+            msg = read_msg()
+        except Exception:
+            log_error(base_dir)
+            msg = None
+        if msg is None:
+            break
+        try:
+            handle(msg)
+        except Exception as e:
+            log_error(base_dir)
+            send({"type": "error", "message": str(e)})
+    if out is not None:  # EOF mid-recording (panel closed) — save what we have
+        fh, out = out, None
+        stop_live()
+        try:
+            finalize_recording(fh, audio_path, outdir, rec_base,
+                               speakers, srt, None, settings)
+        except Exception:
+            log_error(base_dir)
+    else:
+        stop_live()
 
 if __name__ == "__main__":
     main()

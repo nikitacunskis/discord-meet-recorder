@@ -81,9 +81,43 @@ h2 { font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
   background: var(--surface); color: var(--text); border: 1px solid var(--border);
   border-radius: 8px; padding: 6px 10px; font-size: 12px; flex: 1; max-width: 65%;
 }
-.settings .toggles { display: flex; gap: 14px; flex-wrap: wrap; }
-.settings .check { justify-content: flex-start; flex: 1; min-width: 180px; }
-.settings .check input { accent-color: var(--green); width: 16px; height: 16px; }
+/* ---- Claude settings fieldset (5 pipeline toggles + toggle-all) ---- */
+fieldset.steps {
+  border: 1px solid var(--border); border-radius: 8px;
+  margin: 0; padding: 2px 12px 10px;
+}
+.steps legend {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 6px; font-weight: 600;
+}
+.steps label { margin-top: 8px; }
+.steps.off { opacity: 0.45; pointer-events: none; }
+
+.lbl-help { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---- CSS toggle switch (real checkbox stays in DOM) ---- */
+.switch { position: relative; width: 36px; height: 20px; flex: none; }
+.switch input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: pointer;
+}
+.switch .knob {
+  display: block; width: 100%; height: 100%; border-radius: 999px;
+  background: var(--chip-bg); transition: background 0.15s ease; pointer-events: none;
+}
+.switch .knob::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .knob { background: var(--green); }
+.switch input:checked + .knob::after { transform: translateX(16px); }
+.switch input:focus-visible + .knob { outline: 2px solid var(--green); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .switch .knob, .switch .knob::after { transition: none; }
+}
+
+#setOutDir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dir-wrap { display: flex; gap: 6px; flex: 1; max-width: 65%; }
 .dir-wrap input { flex: 1; max-width: none; }
 #dirBtn {
@@ -137,20 +171,20 @@ h2 { font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
 
 .events-head { display: flex; align-items: center; gap: 10px; }
 .events-head h2 { margin: 18px 0 8px; }
-#logToggle {
+#logToggle, #liveToggle {
   border: 1px solid var(--border); background: var(--bg); color: var(--text);
   border-radius: 6px; padding: 2px 10px; font-size: 11px; cursor: pointer;
   margin-top: 8px;
 }
-#logToggle:hover { background: var(--surface-2); }
-#log.console {
+#logToggle:hover, #liveToggle:hover { background: var(--surface-2); }
+.console {
   background: var(--console-bg); color: #ddd; border-radius: 4px;
   max-height: 40vh; overflow-y: auto; font: 11px/1.5 ui-monospace, Menlo, monospace;
   padding: 8px 10px;
 }
-#log div { padding: 1px 0; }
-#log .on { color: #34c46b; }
-#log .off { color: #9aa0a6; }
+.console div { padding: 1px 0; }
+.console .on { color: #34c46b; }
+.console .off { color: #9aa0a6; }
 
 #cmd {
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
@@ -175,12 +209,12 @@ button svg { display: block; margin: auto; }
   background: #23a55a; transition: width 80ms linear;
 }
 
-#claudeHelpBtn {
-  width: 22px; height: 22px; border-radius: 50%; border: 1px solid #3f4147;
-  background: #2b2d31; color: #949ba4; font-size: 12px; cursor: pointer; padding: 0;
+#aiHelpBtn {
+  width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); font-size: 12px; cursor: pointer; padding: 0;
 }
-#claudeHelpBtn:hover { color: #fff; }
+#aiHelpBtn:hover { color: var(--text); background: var(--surface-2); }
 .help {
-  font-size: 12px; color: #949ba4; background: #2b2d31;
-  border-radius: 4px; padding: 8px 10px; line-height: 1.5;
+  font-size: 12px; color: var(--muted); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; line-height: 1.5;
 }

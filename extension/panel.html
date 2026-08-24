@@ -27,48 +27,91 @@
 
   <h2 data-i18n="settings">Iestatījumi</h2>
   <div class="settings">
-    <label><span data-i18n="uiLang">Interfeisa valoda</span>
-      <select id="setUiLang"></select>
-    </label>
-    <label><span data-i18n="claudeCli">Claude CLI</span>
-      <span class="dir-wrap">
-        <select id="setClaude"><option value="claude">claude</option></select>
-        <button id="claudeHelpBtn" type="button">?</button>
-      </span>
-    </label>
-    <div id="claudeHelp" class="help" data-i18n="claudeHelp" hidden></div>
-    <label><span data-i18n="whisperLang">Valoda</span>
-      <select id="setLang"></select>
-    </label>
-    <label><span data-i18n="micDevice">Mikrofons</span>
-      <select id="setMicDev">
-        <option value="" data-i18n="micDefault">sistēmas noklusētais</option>
-      </select>
-    </label>
-    <div class="toggles">
-      <label class="check">
-        <input type="checkbox" id="setAuto" checked />
-        <span data-i18n="autoTrans">Auto-transkripcija pēc ieraksta (native host)</span>
+    <fieldset class="steps">
+      <legend><span data-i18n="extSettings">Paplašinājuma iestatījumi</span></legend>
+      <label><span data-i18n="uiLang">Interfeisa valoda</span>
+        <select id="setUiLang"></select>
       </label>
-      <label class="check">
-        <input type="checkbox" id="setReport" checked />
-        <span data-i18n="edSummary">Kopsavilkums</span>
+      <label><span data-i18n="micDevice">Mikrofons</span>
+        <select id="setMicDev">
+          <option value="" data-i18n="micDefault">sistēmas noklusētais</option>
+        </select>
       </label>
-      <label class="check">
-        <input type="checkbox" id="setDecisions" checked />
-        <span data-i18n="edDecisions">Lēmumi</span>
+      <label><span data-i18n="outDir">Izvades mape</span>
+        <span class="dir-wrap">
+          <input type="text" id="setOutDir" readonly data-i18n-ph="outDirPh" placeholder="(noklusēti: projekta recordings/)" />
+          <button id="dirBtn" type="button" title="…"></button>
+        </span>
       </label>
-      <label class="check">
-        <input type="checkbox" id="setActions" checked />
-        <span data-i18n="edActions">Action items</span>
+    </fieldset>
+    <fieldset class="steps">
+      <legend><span data-i18n="autoTrans">Auto-transkripcija</span>
+        <span class="switch">
+          <input type="checkbox" id="setAuto" checked />
+          <span class="knob"></span>
+        </span>
+      </legend>
+      <label><span data-i18n="whisperLang">Valoda</span>
+        <select id="setLang"></select>
       </label>
-    </div>
-    <label><span data-i18n="outDir">Izvades mape</span>
-      <span class="dir-wrap">
-        <input type="text" id="setOutDir" readonly data-i18n-ph="outDirPh" placeholder="(noklusēti: projekta recordings/)" />
-        <button id="dirBtn" type="button" title="…"></button>
-      </span>
-    </label>
+      <label><span data-i18n="liveTrans">Live transkripts</span>
+        <span class="switch">
+          <input type="checkbox" id="setLive" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+    </fieldset>
+    <fieldset class="steps" id="aiSteps" hidden>
+      <legend><span data-i18n="aiSettings">AI iestatījumi</span>
+        <span class="switch">
+          <input type="checkbox" id="setAiAll" checked />
+          <span class="knob"></span>
+        </span>
+      </legend>
+      <label id="aiProviderRow" hidden><span data-i18n="aiProvider">AI provider</span>
+        <select id="setAiProvider"></select>
+      </label>
+      <label><span class="lbl-help"><span data-i18n="aiInstance">Instance</span><button id="aiHelpBtn" type="button">?</button></span>
+        <select id="setAiInstance"></select>
+      </label>
+      <div id="aiHelp" class="help" hidden></div>
+      <label><span data-i18n="fixConvo">Transkripta auto-labošana</span>
+        <span class="switch">
+          <input type="checkbox" id="setFixConvo" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+      <label><span data-i18n="edSummary">Kopsavilkums</span>
+        <span class="switch">
+          <input type="checkbox" id="setReport" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+      <label><span data-i18n="edDecisions">Lēmumi</span>
+        <span class="switch">
+          <input type="checkbox" id="setDecisions" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+      <label><span data-i18n="edActions">Action items</span>
+        <span class="switch">
+          <input type="checkbox" id="setActions" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+      <label><span data-i18n="edThreads">Tēmas</span>
+        <span class="switch">
+          <input type="checkbox" id="setThreads" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+      <label><span data-i18n="autoTitle">Auto-nosaukums</span>
+        <span class="switch">
+          <input type="checkbox" id="setAutoTitle" checked />
+          <span class="knob"></span>
+        </span>
+      </label>
+    </fieldset>
   </div>
 
   <h2 data-i18n="recordings">Ieraksti</h2>
@@ -77,6 +120,12 @@
     <span class="search-icon"></span>
   </div>
   <div id="recList" class="muted">—</div>
+
+  <div class="events-head">
+    <h2 data-i18n="liveTitle">Live transkripts</h2>
+    <button id="liveToggle" data-i18n="show">Rādīt</button>
+  </div>
+  <div id="liveLog" class="console" hidden></div>
 
   <div class="events-head">
     <h2 data-i18n="events">Notikumi</h2>

@@ -22,10 +22,94 @@ function colorFor(name) {
   return speakerColors.get(key);
 }
 
+const THREAD_PALETTE = ['#e0b64c', '#5ec6d8', '#b07ce8', '#6fbf73', '#e8798a', '#8899e8', '#d89b5e', '#7ad0a8'];
+function threadColor(threadId) {
+  const i = recThreads.findIndex((th) => th.id === threadId);
+  return i < 0 ? null : THREAD_PALETTE[i % THREAD_PALETTE.length];
+}
+
+/* Left sidebar for jumping between topics. Topics interleave, so one thread
+ * may cover several separate segments of the call: threadSegs holds the row
+ * id starting each segment, and repeated clicks on a topic cycle through
+ * them. */
+const threadSegs = new Map(); // thread_id -> [line id of each segment start]
+const threadSegIdx = new Map(); // thread_id -> last visited segment index
+
+function buildThreadNav() {
+  const nav = document.getElementById('threadNav');
+  const list = document.getElementById('threadNavList');
+  list.innerHTML = '';
+  threadSegs.clear();
+  threadSegIdx.clear();
+  if (!recThreads.length) {
+    nav.hidden = true;
+    return;
+  }
+  let prev = null;
+  for (const u of utts) {
+    if (u.thread_id != null && u.thread_id !== prev) {
+      if (!threadSegs.has(u.thread_id)) threadSegs.set(u.thread_id, []);
+      threadSegs.get(u.thread_id).push(u.id);
+    }
+    prev = u.thread_id;
+  }
+  for (const th of recThreads) {
+    const segs = threadSegs.get(th.id) || [];
+    const li = document.createElement('li');
+    li.title = th.name;
+    const dot = document.createElement('span');
+    dot.className = 'nav-dot';
+    dot.style.background = threadColor(th.id);
+    const name = document.createElement('span');
+    name.className = 'nav-name';
+    name.textContent = th.name;
+    li.append(dot, name);
+    if (segs.length > 1) {
+      const count = document.createElement('span');
+      count.className = 'nav-count';
+      count.textContent = segs.length;
+      li.appendChild(count);
+    }
+    li.addEventListener('click', () => jumpToThread(th.id, li));
+    list.appendChild(li);
+  }
+  nav.hidden = false;
+}
+
+function jumpToThread(threadId, li) {
+  const segs = threadSegs.get(threadId) || [];
+  if (!segs.length) return;
+  const i = ((threadSegIdx.get(threadId) ?? -1) + 1) % segs.length;
+  threadSegIdx.set(threadId, i);
+  const row = document.querySelector(`.row[data-id="${segs[i]}"]`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  row.classList.add('jump-flash');
+  setTimeout(() => row.classList.remove('jump-flash'), 1600);
+  document.querySelectorAll('#threadNavList li').forEach((x) => x.classList.remove('active'));
+  li.classList.add('active');
+}
+
 let utts = [];
+let recThreads = [];
+let recStartDt = null;
 let audioChunks = [];
 let stopAt = null;
 let knownDurMs = 0;
+let liveActive = false;
+let livePollTimer = null;
+
+/** While a live session is running (host reports live: true), re-fetch the
+ * lines every few seconds so the transcript follows the ongoing call. */
+function scheduleLivePoll() {
+  clearTimeout(livePollTimer);
+  if (!liveActive) return;
+  livePollTimer = setTimeout(() => {
+    // don't wipe an in-progress manual edit with a re-render
+    if (document.querySelector('.row.editing')) return scheduleLivePoll();
+    port.postMessage({ type: 'load', base, linesOnly: true });
+  }, 4000);
+}
 
 function durMs() {
   const d = els.audio.duration;
@@ -41,20 +125,35 @@ port.onDisconnect.addListener(() => {
 });
 port.onMessage.addListener((msg) => {
   if (msg.type === 'recording') {
+    // Chunked load: metadata now, lines arrive in 'recording-lines' batches,
+    // 'recording-end' closes (the host stays under Chrome's 1 MB message cap).
     if (msg.title) {
       els.title.textContent = msg.title;
       els.title.title = msg.base;
       document.title = msg.title;
     }
-    if (msg.report && (msg.report.summary || msg.report.decisions.length || msg.report.action_items.length)) {
-      renderReport(msg.report);
+    recThreads = msg.threads || [];
+    const hasReport = msg.report
+      && (msg.report.summary || msg.report.decisions.length || msg.report.action_items.length);
+    if (hasReport || recThreads.length) {
+      renderReport(hasReport ? msg.report : null, recThreads);
       document.getElementById('reportBlock').hidden = false;
     }
-    utts = msg.lines;
+    recStartDt = msg.start_dt;
+    liveActive = !!msg.live;
+    utts = [];
+  } else if (msg.type === 'recording-lines') {
+    utts = utts.concat(msg.lines);
+  } else if (msg.type === 'recording-end') {
     knownDurMs = utts.reduce((m, u) => Math.max(m, u.end_dt_ms), 0);
     els.clock.textContent = `${fmt(0)} / ${knownDurMs ? fmt(knownDurMs) : '--:--:--'}`;
+    const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 150;
     render();
-    els.status.textContent = `${utts.length} ${t('edLines')}` + (msg.start_dt ? ` · ${msg.start_dt}` : '');
+    els.status.textContent = `${utts.length} ${t('edLines')}`
+      + (recStartDt ? ` · ${recStartDt}` : '')
+      + (liveActive ? ` · ${t('edLive')}` : '');
+    if (liveActive && nearBottom) window.scrollTo(0, document.body.scrollHeight);
+    scheduleLivePoll();
   } else if (msg.type === 'audio-begin') {
     audioChunks = [];
     els.status.textContent += t('edAudioLoading');
@@ -73,32 +172,82 @@ port.onMessage.addListener((msg) => {
 });
 port.postMessage({ type: 'load', base });
 
-function renderReport(rep) {
+/* One card per thread plus one for the whole record, side by side. Each card
+ * has Summary / Decisions / Action items tabs; empty sections are disabled
+ * and the first non-empty one opens by default. */
+function renderReport(rep, threads = []) {
   const body = document.getElementById('reportBody');
   body.innerHTML = '';
-  if (rep.summary) {
-    const h = document.createElement('h3');
-    h.textContent = t('edSummary');
-    const s = document.createElement('p');
-    s.className = 'rep-summary';
-    s.textContent = rep.summary;
-    body.append(h, s);
+  for (const th of threads) {
+    body.appendChild(reportCard(th.name, th, threadColor(th.id)));
   }
-  const section = (titleKey, items, cls) => {
-    if (!items.length) return;
-    const h = document.createElement('h3');
-    h.textContent = t(titleKey);
-    const ul = document.createElement('ul');
-    ul.className = cls;
-    for (const it of items) {
-      const li = document.createElement('li');
-      li.textContent = it;
-      ul.appendChild(li);
+  if (rep) body.appendChild(reportCard(t('edRecord'), rep, null));
+}
+
+function reportCard(name, rep, color) {
+  const card = document.createElement('div');
+  card.className = 'rep-card';
+  const h = document.createElement('h3');
+  h.className = 'rep-card-name';
+  if (color) {
+    const dot = document.createElement('span');
+    dot.className = 'nav-dot';
+    dot.style.background = color;
+    h.appendChild(dot);
+  }
+  const nameEl = document.createElement('span');
+  nameEl.className = 'rep-card-title';
+  nameEl.textContent = name;
+  h.appendChild(nameEl);
+  h.title = name;
+
+  const tabs = document.createElement('div');
+  tabs.className = 'rep-tabs';
+  const content = document.createElement('div');
+  content.className = 'rep-content';
+  const show = (val) => {
+    content.innerHTML = '';
+    if (Array.isArray(val)) {
+      const ul = document.createElement('ul');
+      for (const item of val) {
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      }
+      content.appendChild(ul);
+    } else {
+      const p = document.createElement('p');
+      p.textContent = val;
+      content.appendChild(p);
     }
-    body.append(h, ul);
   };
-  section('edDecisions', rep.decisions, 'rep-decisions');
-  section('edActions', rep.action_items, 'rep-actions');
+
+  const sections = [
+    ['edSummary', rep.summary],
+    ['edDecisions', rep.decisions],
+    ['edActions', rep.action_items],
+  ];
+  const btns = [];
+  for (const [key, val] of sections) {
+    const b = document.createElement('button');
+    b.textContent = t(key);
+    b.disabled = Array.isArray(val) ? !val.length : !val;
+    b.addEventListener('click', () => {
+      btns.forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      show(val);
+    });
+    btns.push(b);
+    tabs.appendChild(b);
+  }
+  const first = btns.findIndex((b) => !b.disabled);
+  if (first >= 0) {
+    btns[first].classList.add('active');
+    show(sections[first][1]);
+  }
+
+  card.append(h, tabs, content);
+  return card;
 }
 
 function fmt(ms) {
@@ -116,6 +265,13 @@ function render() {
     row.dataset.id = u.id;
     if (u.start_dt_ms < prevEnd) row.classList.add('interrupt');
     prevEnd = Math.max(prevEnd, u.end_dt_ms);
+
+    const tc = u.thread_id != null ? threadColor(u.thread_id) : null;
+    if (tc) {
+      row.classList.add('threaded');
+      row.style.borderLeftColor = tc;
+      row.title = (recThreads.find((th) => th.id === u.thread_id) || {}).name || '';
+    }
 
     const speaker = document.createElement('span');
     speaker.className = 'speaker';
@@ -157,6 +313,7 @@ function render() {
     row.addEventListener('click', () => playFragment(u));
     els.list.appendChild(row);
   }
+  buildThreadNav();
 }
 
 function parseTime(str) {

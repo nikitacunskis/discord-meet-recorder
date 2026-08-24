@@ -4,10 +4,14 @@
  * views); fallback: `usernameSpeaking` class. Polls every 250 ms — a body-wide
  * MutationObserver can crash the tab renderer in large calls.
  * Emits `dvt-speaking` runtime messages; answers `dvt-ping` with
- * {speakers, participants, voiceUsers, tiles}.
+ * {speakers, participants, voiceUsers, tiles, micMuted}.
+ * Also mirrors Discord's own mic state (the Mute/Deafen `role="switch"`
+ * buttons in the RTC controls) as `dvt-mic` messages so the panel can follow
+ * it without a mic button of its own.
  */
 (() => {
   const active = new Map();
+  let lastMicMuted = null;
 
   function send(msg) {
     try {
@@ -79,7 +83,31 @@
     return now;
   }
 
+  /** Discord mic state from the RTC audio controls (locale-independent:
+   * `role="switch"` + `aria-checked`, never the localized aria-label).
+   * Mute and Deafen are both switches on the same `audioButtonWithMenu`
+   * plate; either one checked means the user is not audible to the call.
+   * Returns null when no controls are visible (not connected to voice). */
+  function micMutedNow() {
+    let found = false;
+    for (const b of document.querySelectorAll('button[role="switch"][aria-checked]')) {
+      if (!cls(b).includes('audiobuttonwithmenu')) continue;
+      found = true;
+      if (b.getAttribute('aria-checked') === 'true') return true;
+    }
+    if (!found) {
+      if (document.querySelector('[class*="plateMuted"]')) return true;
+      return null;
+    }
+    return false;
+  }
+
   function sweep() {
+    const muted = micMutedNow();
+    if (muted !== null && muted !== lastMicMuted) {
+      lastMicMuted = muted;
+      send({ type: 'dvt-mic', muted, t: Date.now() });
+    }
     const now = currentSpeakers();
     for (const key of [...active.keys()]) {
       if (!now.has(key)) {
@@ -144,6 +172,7 @@
         participants: currentParticipants(),
         voiceUsers: document.querySelectorAll('[class*="voiceUser"]').length,
         tiles: document.querySelectorAll('[data-selenium-video-tile]').length,
+        micMuted: micMutedNow(),
       });
     }
     return false;

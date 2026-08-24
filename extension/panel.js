@@ -1,10 +1,16 @@
 /**
  * Side panel controller.
  * Records tab audio (tabCapture, getDisplayMedia fallback) mixed with the
- * microphone through a 1.8x gain node (MediaRecorder, audio/webm;codecs=opus),
- * collects the speaker timeline from content.js, and streams the result to the
- * native host `com.dvt.recorder` (storage + transcription). Falls back to plain
- * Downloads when the host is unavailable.
+ * microphone through a gain node (MediaRecorder, audio/webm;codecs=opus).
+ * The mic is always captured and always connected; mute is just gain 0, so
+ * the mixed track never breaks and mute/unmute mid-recording is seamless.
+ * The panel mic button and Discord's own mute/deafen switches (mirrored by
+ * content.js as `dvt-mic`) both drive the same gain.
+ * Chunks stream to the native host `com.dvt.recorder` continuously as the
+ * recorder emits them; cumulative speaker-timeline snapshots (`events`) are
+ * sent at silence boundaries (cut: true — safe places to split for live
+ * transcription) and at least every 10 s. Falls back to plain Downloads when
+ * the host is unavailable.
  */
 const els = {
   sensor: document.getElementById('sensor'),
@@ -22,7 +28,15 @@ let recorder = null;
 let stream = null;
 let micStream = null;
 let audioCtx = null;
+let micGain = null;
 let chunks = [];
+let streaming = false;
+let sessionBase = null;
+let startPending = false;
+let savePending = false;
+let lastVoiceTs = 0;
+let lastEventsSent = 0;
+let flushChain = Promise.resolve();
 let events = [];
 let t0 = 0;
 let timerInterval = null;
@@ -30,6 +44,9 @@ let lastFiles = null;
 const speakingNow = new Map();
 let participants = [];
 let micOn = true;
+let micSynced = false;
+
+const MIC_GAIN = 1.8;
 
 function statusline(el, problemText) {
   if (problemText) {
@@ -46,15 +63,21 @@ chrome.runtime.onMessage.addListener((msg) => {
     statusline(els.sensor, null);
     return;
   }
+  if (msg.type === 'dvt-mic') {
+    setMicOn(!msg.muted, 'Discord');
+    return;
+  }
   if (msg.type !== 'dvt-speaking') return;
 
   statusline(els.sensor, null);
+  lastVoiceTs = Date.now();
   const key = msg.userId || msg.name;
   if (msg.speaking) speakingNow.set(key, msg.name);
   else speakingNow.delete(key);
   renderParticipants();
 
   if (recorder && recorder.state === 'recording') {
+    voiceSinceEvents = true;
     const t_ms = Math.max(0, msg.t - t0);
     events.push({ name: msg.name, userId: msg.userId || null, speaking: msg.speaking, t_ms });
     logLine(`${fmtTime(t_ms)} ${msg.speaking ? '▶' : '⏹'} ${msg.name}`, msg.speaking ? 'on' : 'off');
@@ -87,7 +110,7 @@ function logLine(text, cls) {
   while (els.log.childElementCount > 500) els.log.lastChild.remove();
 }
 
-const SETTINGS_KEYS = ['setUiLang', 'setClaude', 'setLang', 'setMicDev', 'setReport', 'setDecisions', 'setActions', 'setAuto', 'setOutDir'];
+const SETTINGS_KEYS = ['setUiLang', 'setAiProvider', 'setAiInstance', 'setLang', 'setMicDev', 'setFixConvo', 'setReport', 'setDecisions', 'setActions', 'setThreads', 'setAutoTitle', 'setAuto', 'setLive', 'setOutDir'];
 const MODEL = 'large-v3-turbo';
 
 /** Whisper multilingual model language set (code, English name). */
@@ -152,21 +175,64 @@ async function populateWhisperLangs() {
   sel.value = (await storedSetting('setLang')) || 'auto';
 }
 
-async function populateClaude(items) {
-  const sel = document.getElementById('setClaude');
-  sel.innerHTML = '';
-  for (const name of items && items.length ? items : ['claude']) {
-    const o = document.createElement('option');
-    o.value = name;
-    o.textContent = name === 'claude' ? 'claude (~/.claude)' : `${name} (~/.${name})`;
-    sel.appendChild(o);
-  }
-  const want = await storedSetting('setClaude');
-  if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
+// AI providers come from the host factory (tools/ai_providers.py): only
+// providers whose CLI is installed are listed. No provider on the machine
+// is a normal setup, not an error — the whole AI section stays hidden and
+// no AI step is ever requested.
+let aiProviders = [];
+const aiAvailable = () => aiProviders.length > 0;
+
+function currentAiProvider() {
+  const name = document.getElementById('setAiProvider').value;
+  return aiProviders.find((p) => p.name === name) || aiProviders[0] || null;
 }
 
-document.getElementById('claudeHelpBtn').addEventListener('click', () => {
-  const h = document.getElementById('claudeHelp');
+function applyAiHelp() {
+  const p = currentAiProvider();
+  if (!p) return;
+  const h = document.getElementById('aiHelp');
+  h.dataset.i18n = 'aiHelp_' + p.name; // keeps the text live on language switch
+  h.textContent = t('aiHelp_' + p.name);
+}
+
+async function populateAiProviders(providers) {
+  aiProviders = providers || [];
+  document.getElementById('aiSteps').hidden = !aiAvailable();
+  if (!aiAvailable()) return;
+  const sel = document.getElementById('setAiProvider');
+  sel.innerHTML = '';
+  for (const p of aiProviders) {
+    const o = document.createElement('option');
+    o.value = p.name;
+    o.textContent = p.label || p.name;
+    sel.appendChild(o);
+  }
+  const want = await storedSetting('setAiProvider');
+  if (want && aiProviders.some((p) => p.name === want)) sel.value = want;
+  // A single provider needs no picker row; everything still flows through it.
+  document.getElementById('aiProviderRow').hidden = aiProviders.length < 2;
+  await populateAiInstances();
+}
+
+async function populateAiInstances() {
+  const p = currentAiProvider();
+  const sel = document.getElementById('setAiInstance');
+  sel.innerHTML = '';
+  if (!p) return;
+  for (const inst of p.instances) {
+    const o = document.createElement('option');
+    o.value = inst.name;
+    o.textContent = inst.label || inst.name;
+    sel.appendChild(o);
+  }
+  const want = (await storedSetting('setAiInstance')) ||
+    (await storedSetting('setClaude')); // pre-factory settings key
+  if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
+  applyAiHelp();
+}
+
+document.getElementById('aiHelpBtn').addEventListener('click', () => {
+  const h = document.getElementById('aiHelp');
   h.hidden = !h.hidden;
 });
 
@@ -192,9 +258,45 @@ function saveSettings() {
   chrome.storage.local.set({ dvtSettings: s });
 }
 
+/* recordings.status pipeline states → i18n keys for the recording-list pill. */
+const STATUS_LABELS = {
+  recording: 'stRecording',
+  transcribing: 'stTranscribing',
+  ai_postprocess_autofix: 'stAiAutofix',
+  ai_postprocess_threads: 'stAiThreads',
+  ai_postprocess_report: 'stAiReport',
+  ai_postprocess_title: 'stAiTitle',
+  error: 'stError',
+};
+
+const AI_STEP_IDS = ['setFixConvo', 'setReport', 'setDecisions', 'setActions', 'setThreads', 'setAutoTitle'];
+function syncPipelineLock() {
+  const on = document.getElementById('setAuto').checked;
+  document.getElementById('aiSteps').classList.toggle('off', !on);
+  // Master off forces every AI step off — they cannot be on without
+  // auto-transcription; disabled also keeps them out of the Tab order.
+  for (const id of [...AI_STEP_IDS, 'setAiAll']) {
+    const el = document.getElementById(id);
+    el.disabled = !on;
+    if (!on) el.checked = false;
+  }
+}
+// The legend switch is derived state (all steps on), never stored itself.
+function syncAiAll() {
+  document.getElementById('setAiAll').checked =
+    AI_STEP_IDS.every((id) => document.getElementById(id).checked);
+}
+document.getElementById('setAiAll').addEventListener('change', (e) => {
+  for (const id of AI_STEP_IDS) document.getElementById(id).checked = e.target.checked;
+  saveSettings();
+});
+
 for (const id of SETTINGS_KEYS)
   document.getElementById(id).addEventListener('change', () => {
+    if (id === 'setAuto') syncPipelineLock(); // before save: it may force steps off
     saveSettings();
+    if (AI_STEP_IDS.includes(id)) syncAiAll();
+    if (id === 'setAiProvider') populateAiInstances();
     if (id === 'setUiLang') {
       I18N.setLang(document.getElementById(id).value);
       renderMicBtn();
@@ -205,6 +307,8 @@ loadSettings().then(() => I18N.init().then(() => {
   renderMicBtn();
   populateUiLangs();
   populateWhisperLangs();
+  syncPipelineLock();
+  syncAiAll();
 }));
 
 document.getElementById('dirBtn').innerHTML = DVT_ICONS.folder;
@@ -218,11 +322,29 @@ function renderMicBtn() {
   els.micBtn.classList.toggle('off', !micOn);
   els.micBtn.title = micOn ? t('micTipOn') : t('micTipOff');
 }
-els.micBtn.addEventListener('click', () => {
-  micOn = !micOn;
+
+/** Mute is gain, not track state: the mic node stays connected, so the mixed
+ * track and the timeline never break, and unmuting mid-recording just works. */
+function applyMicGain() {
+  if (!micGain || !audioCtx) return;
+  // short exponential ramp — no click on toggle
+  micGain.gain.setTargetAtTime(micOn ? MIC_GAIN : 0, audioCtx.currentTime, 0.015);
+}
+
+function setMicOn(on, source) {
+  if (on === micOn) return;
+  micOn = on;
   chrome.storage.local.set({ dvtMicOn: micOn });
   renderMicBtn();
-});
+  applyMicGain();
+  if (recorder && recorder.state === 'recording') {
+    const suffix = source ? ` (${source})` : '';
+    logLine(`${fmtTime(Date.now() - t0)} ${t(micOn ? 'micUnmutedLog' : 'micMutedLog')}${suffix}`,
+            micOn ? 'on' : 'off');
+  }
+}
+
+els.micBtn.addEventListener('click', () => setMicOn(!micOn));
 
 async function populateMics() {
   const sel = document.getElementById('setMicDev');
@@ -274,7 +396,7 @@ function startMeter(s) {
     for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / buf.length);
     document.getElementById('micLevel').style.width = Math.min(100, rms * 300) + '%';
-    if (rms > 0.004) {
+    if (rms > 0.004 || !micOn) {
       silentSince = Date.now();
     } else if (!silentWarned && Date.now() - silentSince > 6000 &&
                recorder && recorder.state === 'recording') {
@@ -315,14 +437,19 @@ document.getElementById('setMicDev').addEventListener('change', async () => {
 
 function collectSettings() {
   return {
-    claude: document.getElementById('setClaude').value,
+    aiProvider: document.getElementById('setAiProvider').value || 'claude',
+    aiInstance: document.getElementById('setAiInstance').value || '',
     uiLang: document.getElementById('setUiLang').value || I18N.lang,
     model: MODEL,
     language: document.getElementById('setLang').value,
-    report: document.getElementById('setReport').checked,
-    decisions: document.getElementById('setDecisions').checked,
-    actions: document.getElementById('setActions').checked,
+    fixConvo: aiAvailable() && document.getElementById('setFixConvo').checked,
+    report: aiAvailable() && document.getElementById('setReport').checked,
+    decisions: aiAvailable() && document.getElementById('setDecisions').checked,
+    actions: aiAvailable() && document.getElementById('setActions').checked,
+    threads: aiAvailable() && document.getElementById('setThreads').checked,
+    autoTitle: aiAvailable() && document.getElementById('setAutoTitle').checked,
     autoTranscribe: document.getElementById('setAuto').checked,
+    live: document.getElementById('setLive').checked,
     outDir: document.getElementById('setOutDir').value.trim() || null,
   };
 }
@@ -342,9 +469,14 @@ function connectNative() {
   nativePort.onDisconnect.addListener(() => {
     nativePort = null;
     statusline(els.native, t('nativeMissing'));
+    if (streaming || savePending) {
+      streaming = false;
+      savePending = false;
+      setStatus(t('hostError'), true);
+    }
   });
   nativePort.postMessage({ type: 'ping' });
-  nativePort.postMessage({ type: 'claude-instances' });
+  nativePort.postMessage({ type: 'ai-providers' });
   requestList();
 }
 
@@ -372,16 +504,22 @@ function onNativeMsg(msg) {
   if (msg.type === 'pong') {
     statusline(els.native, null);
   } else if (msg.type === 'saved') {
+    savePending = false;
     logLine(t('savedPrefix') + msg.path);
     setStatus(t('savedFolder'));
     requestList();
+  } else if (msg.type === 'error') {
+    if (msg.message) logLine(t('edError') + msg.message);
+    setStatus(t('hostError'), true);
   } else if (msg.type === 'log') {
     logLine(msg.line);
+  } else if (msg.type === 'live') {
+    addLiveLines(msg.lines);
   } else if (msg.type === 'done') {
     setStatus(msg.code === 0 ? t('transDone') + msg.base : t('transFail'));
     requestList();
-  } else if (msg.type === 'claude-instances') {
-    populateClaude(msg.items);
+  } else if (msg.type === 'ai-providers') {
+    populateAiProviders(msg.providers);
   } else if (msg.type === 'list') {
     renderRecList(msg);
   } else if (msg.type === 'title-set' || msg.type === 'recording-deleted') {
@@ -395,8 +533,11 @@ function onNativeMsg(msg) {
   }
 }
 
+let renameInProgress = false;
+
 function renderRecList(msg) {
   const el = document.getElementById('recList');
+  if (renameInProgress) return; // don't destroy an in-progress rename input
   recPage = msg.page;
   el.classList.remove('muted');
   el.innerHTML = '';
@@ -411,8 +552,16 @@ function renderRecList(msg) {
     card.className = 'rec-card';
 
     const pill = document.createElement('span');
-    pill.className = 'pill ' + (it.report ? 'ok' : it.transcript ? 'mid' : 'wait');
-    pill.textContent = it.report ? 'report' : it.transcript ? 'transcript' : 'audio';
+    // An in-flight status (the recordings.status machine) wins over the
+    // done-state pills; legacy rows have no status and fall through.
+    const stKey = STATUS_LABELS[it.status];
+    if (it.status !== 'done' && stKey) {
+      pill.className = 'pill wait';
+      pill.textContent = t(stKey);
+    } else {
+      pill.className = 'pill ' + (it.report ? 'ok' : it.transcript ? 'mid' : 'wait');
+      pill.textContent = it.report ? 'report' : it.transcript ? 'transcript' : 'audio';
+    }
 
     const title = document.createElement('span');
     title.className = 'rec-title';
@@ -426,16 +575,26 @@ function renderRecList(msg) {
     btn.innerHTML = DVT_ICONS.pencil;
     btn.title = t('renameTitle');
     btn.addEventListener('click', () => {
+      if (renameInProgress) return;
+      renameInProgress = true;
       const input = document.createElement('input');
       input.type = 'text';
       input.value = it.title || '';
       input.placeholder = t('titlePh');
+      input.addEventListener('click', (e) => e.stopPropagation());
       const commit = () => {
+        renameInProgress = false;
         nativePort && nativePort.postMessage({ type: 'set-title', base: it.base, title: input.value });
+      };
+      const cancel = () => {
+        renameInProgress = false;
+        input.removeEventListener('blur', commit);
+        title.textContent = it.title || it.base;
+        requestList();
       };
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') input.blur();
-        if (e.key === 'Escape') { input.removeEventListener('blur', commit); requestList(); }
+        if (e.key === 'Escape') cancel();
       });
       input.addEventListener('blur', commit);
       title.textContent = '';
@@ -496,6 +655,78 @@ async function sendToNative(files) {
   });
 }
 
+function speakersPayload(durMs) {
+  const intervals = buildIntervals(events, durMs);
+  return {
+    speakers: JSON.stringify(
+      { started_at: new Date(t0).toISOString(), duration_ms: durMs, intervals }, null, 2),
+    srt: toSrt(intervals),
+  };
+}
+
+// Streaming: every recorder chunk goes to the host immediately. flushChain
+// serializes the async blob→base64 conversions so chunk order is preserved.
+let voiceSinceEvents = false;
+
+function postChunk(blob) {
+  flushChain = flushChain.then(async () => {
+    const CHUNK = 256 * 1024;
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    for (let i = 0; i < buf.length; i += CHUNK)
+      nativePort && nativePort.postMessage({ type: 'chunk', data: b64(buf.subarray(i, i + CHUNK)) });
+  });
+  return flushChain;
+}
+
+/** Cumulative speaker snapshot. cut: true marks a silence boundary — a safe
+ * place for the host to split the audio for live transcription. */
+function postEvents(cut) {
+  lastEventsSent = Date.now();
+  voiceSinceEvents = false;
+  const payload = speakersPayload(Date.now() - t0);
+  flushChain = flushChain.then(() => {
+    nativePort && nativePort.postMessage({ type: 'events', cut: !!cut, ...payload });
+  });
+  return flushChain;
+}
+
+function onStreamChunk(blob) {
+  postChunk(blob);
+  const now = Date.now();
+  const silence = speakingNow.size === 0 && now - lastVoiceTs >= 1000;
+  if (silence && voiceSinceEvents && now - lastEventsSent >= 2000) postEvents(true);
+  else if (now - lastEventsSent >= 10000) postEvents(false);
+}
+
+// ---- live transcript (host-side incremental whisper during the call) ----
+const liveToggle = document.getElementById('liveToggle');
+const liveLog = document.getElementById('liveLog');
+liveToggle.addEventListener('click', () => {
+  liveLog.hidden = !liveLog.hidden;
+  liveToggle.dataset.i18n = liveLog.hidden ? 'show' : 'hide';
+  liveToggle.textContent = t(liveToggle.dataset.i18n);
+});
+
+function clearLive() {
+  liveLog.innerHTML = '';
+}
+
+function addLiveLines(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) return;
+  if (liveLog.hidden) {
+    liveLog.hidden = false;
+    liveToggle.dataset.i18n = 'hide';
+    liveToggle.textContent = t('hide');
+  }
+  for (const l of lines) {
+    const div = document.createElement('div');
+    div.textContent = `[${fmtTime(l.start_ms)}] ${l.speaker}: ${l.text}`;
+    liveLog.appendChild(div);
+  }
+  while (liveLog.childElementCount > 500) liveLog.firstChild.remove();
+  liveLog.scrollTop = liveLog.scrollHeight;
+}
+
 const logToggle = document.getElementById('logToggle');
 logToggle.addEventListener('click', () => {
   els.log.hidden = !els.log.hidden;
@@ -521,6 +752,13 @@ async function pingSensor() {
       statusline(els.sensor, null);
       participants = resp.participants || [];
       renderParticipants();
+      // One-time initial sync: Discord's mute state is the source of truth
+      // when the panel opens; afterwards only real changes (dvt-mic) apply,
+      // so a manual panel toggle is not overridden every 3 s.
+      if (!micSynced && typeof resp.micMuted === 'boolean') {
+        micSynced = true;
+        setMicOn(!resp.micMuted, 'Discord');
+      }
     }
   } catch (e) {
     statusline(els.sensor, t('sensorNotLoaded'));
@@ -569,6 +807,9 @@ async function captureTabAudio(tab) {
 }
 
 async function startRecording() {
+  if (startPending || (recorder && recorder.state !== 'inactive')) return;
+  startPending = true;
+  els.recBtn.disabled = true;
   try {
     const tab = await findDiscordTab();
     if (!tab) {
@@ -581,18 +822,19 @@ async function startRecording() {
       if (recorder && recorder.state === 'recording') stopRecording();
     });
 
+    // The mic is captured even when currently muted: mute is only gain 0 on
+    // an always-connected node, so it can be turned on mid-recording.
     micStream = null;
-    if (micOn) {
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
-        startMeter(micStream);
-        populateMics();
-      } catch (e) {
-        logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
-        if (e.name === 'NotAllowedError') {
-          logLine(t('micPermOpening'));
-          chrome.tabs.create({ url: chrome.runtime.getURL('mic.html') });
-        }
+    micGain = null;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+      startMeter(micStream);
+      populateMics();
+    } catch (e) {
+      logLine(t('micWarn1') + ' (' + e.name + ') — ' + t('micWarn2'));
+      if (e.name === 'NotAllowedError') {
+        logLine(t('micPermOpening'));
+        chrome.tabs.create({ url: chrome.runtime.getURL('mic.html') });
       }
     }
 
@@ -601,8 +843,8 @@ async function startRecording() {
     const tabSrc = audioCtx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
     tabSrc.connect(mixDest);
     if (micStream) {
-      const micGain = audioCtx.createGain();
-      micGain.gain.value = 1.8;
+      micGain = audioCtx.createGain();
+      micGain.gain.value = micOn ? MIC_GAIN : 0;
       audioCtx.createMediaStreamSource(micStream).connect(micGain);
       micGain.connect(mixDest);
     }
@@ -611,9 +853,23 @@ async function startRecording() {
 
     chunks = [];
     events = [];
+    savePending = false;
+    lastVoiceTs = 0;
+    lastEventsSent = 0;
+    voiceSinceEvents = false;
+    flushChain = Promise.resolve();
     t0 = Date.now();
+    sessionBase = 'discord-call-' + tsName(t0);
+    streaming = !!nativePort;
+    clearLive();
+    if (streaming)
+      nativePort.postMessage({ type: 'begin', base: sessionBase, settings: collectSettings() });
     recorder = new MediaRecorder(mixDest.stream, { mimeType: 'audio/webm;codecs=opus' });
-    recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    recorder.ondataavailable = (e) => {
+      if (!e.data.size) return;
+      if (streaming && nativePort) onStreamChunk(e.data);
+      else chunks.push(e.data);
+    };
     recorder.onstop = onRecorderStop;
     recorder.start(1000);
 
@@ -638,7 +894,11 @@ async function startRecording() {
     } else {
       setStatus(t('startFailPrefix') + e.message, true);
     }
+    streaming = false;
     cleanup();
+  } finally {
+    startPending = false;
+    els.recBtn.disabled = false;
   }
 }
 
@@ -652,15 +912,30 @@ function onRecorderStop() {
     events.push({ name, userId: key === name ? null : key, speaking: false, t_ms: durMs });
   }
 
-  const base = 'discord-call-' + tsName(t0);
+  const base = sessionBase || 'discord-call-' + tsName(t0);
   const intervals = buildIntervals(events, durMs);
+  const payload = speakersPayload(durMs);
+
+  if (streaming && nativePort) {
+    streaming = false;
+    savePending = true;
+    logLine(`${fmtTime(durMs)} ${t('sentToHost')} (${intervals.length})…`);
+    flushChain
+      .then(() => {
+        nativePort && nativePort.postMessage({ type: 'finish', base, ...payload });
+      })
+      .catch((e) => {
+        savePending = false;
+        logLine(t('hostErrFallback') + e.message);
+        setStatus(t('hostError'), true);
+      });
+    cleanup();
+    return;
+  }
 
   const audio = new Blob(chunks, { type: 'audio/webm' });
-  const json = new Blob(
-    [JSON.stringify({ started_at: new Date(t0).toISOString(), duration_ms: durMs, intervals }, null, 2)],
-    { type: 'application/json' }
-  );
-  const srt = new Blob([toSrt(intervals)], { type: 'text/plain' });
+  const json = new Blob([payload.speakers], { type: 'application/json' });
+  const srt = new Blob([payload.srt], { type: 'text/plain' });
 
   lastFiles = { audio, json, srt, base };
 
@@ -694,6 +969,7 @@ function cleanup() {
   stream = null;
   micStream = null;
   audioCtx = null;
+  micGain = null;
   recorder = null;
   document.body.classList.remove('rec');
   els.recBtn.dataset.i18n = 'start';
@@ -759,5 +1035,5 @@ function srtTime(ms) {
 function tsName(t) {
   const d = new Date(t);
   const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
