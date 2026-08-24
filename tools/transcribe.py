@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import os
+import time
 import re
 import shutil
 import subprocess
@@ -85,11 +86,28 @@ def ensure_model(name: str, url_tmpl: str = MODEL_URL) -> Path:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     url = url_tmpl.format(m=name)
     print(f"Lejupielādēju modeli {name} … ({url})")
-    tmp = path.with_suffix(".part")
+    # Unique temp file per process: the live pipeline and the post-run
+    # transcription may fetch the same model concurrently, and two writers on
+    # one .part corrupt it / block the rename on Windows (WinError 32).
+    tmp = path.with_suffix(f".{os.getpid()}.part")
     try:
-        urllib.request.urlretrieve(url, tmp)
-        tmp.rename(path)
+        _, headers = urllib.request.urlretrieve(url, tmp)
+        want = int(headers.get("Content-Length") or 0)
+        if want and tmp.stat().st_size != want:
+            raise OSError(f"incomplete download: {tmp.stat().st_size}/{want} bytes")
+        for attempt in range(5):
+            if path.exists():        # another process won the race — keep theirs
+                tmp.unlink()
+                break
+            try:
+                os.replace(tmp, path)
+                break
+            except OSError:          # antivirus may briefly hold the fresh file
+                if attempt == 4:
+                    raise
+                time.sleep(1)
     except Exception:
+        tmp.unlink(missing_ok=True)
         log.exception("Stage 'model download' failed (%s)", url)
         sys.exit(f"Modeļa lejupielāde neizdevās: {url} (skat. {LOG_FILE})")
     return path
