@@ -44,6 +44,14 @@ log = logging.getLogger("transcribe")
 
 import builtins
 
+# Windows console/pipe encoding is a legacy codepage (e.g. cp1251) that cannot
+# represent the Latvian status messages — switch stdout/stderr to UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
+
 def print(*args, **kwargs):  # noqa: A001 — deliberate module-wide shadow
     """stdout is a pipe to the native host, and the host can die mid-run
     (panel or Chrome closed). Console output must never abort the pipeline:

@@ -53,6 +53,32 @@ _send_lock = threading.Lock()
 # exceeds 1 MB; keep every serialized message well below that.
 MSG_MAX_BYTES = 512 * 1024
 
+def pick_folder() -> str | None:
+    """Native folder-picker dialog; returns the chosen path or None."""
+    try:
+        if sys.platform == "darwin":
+            r = subprocess.run(
+                ["osascript", "-e",
+                 'POSIX path of (choose folder with prompt "Izvades mape ierakstiem")'],
+                capture_output=True, text=True)
+            return r.stdout.strip().rstrip("/") if r.returncode == 0 else None
+        if sys.platform == "win32":
+            ps = ("Add-Type -AssemblyName System.Windows.Forms; "
+                  "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                  "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)"
+                  " { Write-Output $d.SelectedPath }")
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-STA", "-Command", ps],
+                capture_output=True, text=True)
+            picked = r.stdout.strip()
+            return picked or None
+        r = subprocess.run(["zenity", "--file-selection", "--directory"],
+                           capture_output=True, text=True)
+        return (r.stdout.strip() or None) if r.returncode == 0 else None
+    except OSError:
+        return None
+
+
 def iter_batches(items: list, budget: int = MSG_MAX_BYTES):
     """Yield slices of items whose JSON-encoded size stays under budget."""
     batch, size = [], 0
@@ -346,12 +372,7 @@ def main() -> None:
                 legacy.unlink()
             send({"type": "recording-deleted", "base": b})
         elif t == "pick-dir":
-            r = subprocess.run(
-                ["osascript", "-e",
-                 'POSIX path of (choose folder with prompt "Izvades mape ierakstiem")'],
-                capture_output=True, text=True)
-            picked = r.stdout.strip().rstrip("/") if r.returncode == 0 else None
-            send({"type": "dir-picked", "dir": picked})
+            send({"type": "dir-picked", "dir": pick_folder()})
         elif t == "set-title":
             db = dvtdb.connect()
             audio = find_audio(msg["base"], base_dir)
