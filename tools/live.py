@@ -316,7 +316,7 @@ class LiveTranscriber:
             return
         self.send({"type": "live", "lines": lines})
         try:
-            with open(self.md_path, "a") as f:
+            with open(self.md_path, "a", encoding="utf-8") as f:
                 for l in lines:
                     f.write(f"[{T.fmt(l['start_ms'])}] {l['speaker']}: "
                             f"{l['text']}\n")

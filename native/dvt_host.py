@@ -63,13 +63,15 @@ def pick_folder() -> str | None:
                 capture_output=True, text=True)
             return r.stdout.strip().rstrip("/") if r.returncode == 0 else None
         if sys.platform == "win32":
-            ps = ("Add-Type -AssemblyName System.Windows.Forms; "
+            ps = ("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                  "Add-Type -AssemblyName System.Windows.Forms; "
                   "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
                   "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)"
                   " { Write-Output $d.SelectedPath }")
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-STA", "-Command", ps],
-                capture_output=True, text=True)
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace")
             picked = r.stdout.strip()
             return picked or None
         r = subprocess.run(["zenity", "--file-selection", "--directory"],
@@ -106,7 +108,7 @@ def log_error(base_dir: Path) -> None:
     """Append the current exception traceback to <base_dir>/dvt_host.log."""
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
-        with open(base_dir / "dvt_host.log", "a") as f:
+        with open(base_dir / "dvt_host.log", "a", encoding="utf-8", errors="replace") as f:
             f.write(time.strftime("[%Y-%m-%d %H:%M:%S]\n") + traceback.format_exc() + "\n")
     except Exception:
         pass
@@ -138,7 +140,8 @@ def run_transcribe(audio: Path, settings: dict) -> None:
     send({"type": "log", "line": "$ " + " ".join(cmd)})
     try:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, text=True)
+                             stderr=subprocess.STDOUT, text=True,
+                             encoding="utf-8", errors="replace")
         for line in p.stdout:
             send({"type": "log", "line": line.rstrip()})
         p.wait()
@@ -204,7 +207,7 @@ def import_from_md(db, base: str, base_dir: Path) -> int | None:
     if not md.exists():
         return None
     rows = []
-    for line in md.read_text().splitlines():
+    for line in md.read_text(encoding="utf-8").splitlines():
         m = MD_LINE.match(line.strip())
         if m:
             h, mnt, s, speaker, text = m.groups()
@@ -284,11 +287,11 @@ def finalize_recording(out, audio_path: Path, outdir: Path, base: str,
         pass
     base_path = str(outdir / base)
     if speakers is not None:
-        Path(base_path + ".speakers.json").write_text(speakers)
+        Path(base_path + ".speakers.json").write_text(speakers, encoding="utf-8")
     if srt is not None:
-        Path(base_path + ".speakers.srt").write_text(srt)
+        Path(base_path + ".speakers.srt").write_text(srt, encoding="utf-8")
     if prompt:
-        Path(base_path + ".prompt.txt").write_text(prompt)
+        Path(base_path + ".prompt.txt").write_text(prompt, encoding="utf-8")
     send({"type": "saved", "path": str(audio_path)})
     auto = settings.get("autoTranscribe", True)
     try:

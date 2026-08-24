@@ -113,7 +113,8 @@ def ensure_model(name: str, url_tmpl: str = MODEL_URL) -> Path:
     return path
 
 def run(cmd: list[str]) -> None:
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
     if r.returncode != 0:
         log.error("Command failed (rc=%d): %s\nstderr: %s",
                   r.returncode, " ".join(cmd), r.stderr[-2000:])
@@ -327,7 +328,7 @@ def process(audio_arg: Path, args) -> None:
     set_status(base, "transcribing")
 
     try:
-        data = json.loads(speakers_file.read_text())
+        data = json.loads(speakers_file.read_text(encoding="utf-8"))
         raw = data["intervals"]
         intervals = clean_intervals(raw)
     except Exception:
@@ -366,7 +367,7 @@ def process(audio_arg: Path, args) -> None:
                 print(f"  bloks {i + 1}/{len(blocks)} NEIZDEVĀS (nav {json_file.name}), izlaižu")
                 continue
             try:
-                trans = json.loads(json_file.read_text())["transcription"]
+                trans = json.loads(json_file.read_text(encoding="utf-8"))["transcription"]
             except Exception:
                 log.exception("Block %d/%d failed: bad whisper JSON %s",
                               i + 1, len(blocks), json_file.name)
@@ -423,7 +424,7 @@ def process(audio_arg: Path, args) -> None:
     header = f"# Discord zvans {base.name}\n\nRunātāji: " + ", ".join(
         sorted({iv['name'] for iv in intervals})) + "\n\n"
     try:
-        out_file.write_text(header + "\n".join(lines) + "\n")
+        out_file.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
     except OSError:
         log.exception("Stage 'transcript write' failed (%s)", out_file)
         log.error("Transcript that could not be written:\n%s", "\n".join(lines))
@@ -505,7 +506,7 @@ def rewrite_transcript(base: Path, out_file: Path, lines: list[dict]) -> None:
         sorted({l["speaker_name"] for l in lines})) + "\n\n"
     body = "\n".join(f"[{fmt(l['start_dt_ms'])}] {l['speaker_name']}: {l['speaker_line']}"
                      for l in lines)
-    out_file.write_text(header + body + "\n")
+    out_file.write_text(header + body + "\n", encoding="utf-8")
 
 def fix_conversation(base: Path, out_file: Path, args) -> None:
     """Claude pre-pass over the raw transcript, before any report section.
@@ -631,7 +632,7 @@ def generate_title(base: Path, out_file: Path, args) -> None:
                      base.name, rec["title"])
             return
         try:
-            transcript = out_file.read_text()
+            transcript = out_file.read_text(encoding="utf-8")
         except OSError:
             log.exception("Stage 'title' failed: cannot read %s", out_file)
             print(f"Nevar nolasīt {out_file} — title skipped (skat. {LOG_FILE})")
@@ -688,7 +689,7 @@ def generate_report(base: Path, out_file: Path, args) -> None:
     log.info("Stage 'report generation': sections=[%s] lang=%s ai=%s base=%s",
              keys, lang_name, ai_name(args), base.name)
     try:
-        transcript = out_file.read_text()
+        transcript = out_file.read_text(encoding="utf-8")
     except OSError:
         log.exception("Stage 'report generation' failed: cannot read %s", out_file)
         print(f"Nevar nolasīt {out_file} — report skipped (skat. {LOG_FILE})")
@@ -730,7 +731,7 @@ def generate_report(base: Path, out_file: Path, args) -> None:
         log.error("Raw report JSON for '%s':\n%s", base.name, raw)
         report_file = Path(str(base) + ".report.md")
         try:
-            report_file.write_text(raw + "\n")
+            report_file.write_text(raw + "\n", encoding="utf-8")
             print(f"DB write failed — raw report saved to {report_file} "
                   f"(skat. {LOG_FILE})")
         except OSError:

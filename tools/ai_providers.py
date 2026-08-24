@@ -80,7 +80,8 @@ class ClaudeProvider(Provider):
     def run(self, prompt: str, instance: str) -> subprocess.CompletedProcess:
         cmd, env = self._cmd_env(instance)
         return subprocess.run(cmd, input=prompt, capture_output=True,
-                              text=True, env=env, timeout=TIMEOUT_S)
+                              text=True, encoding="utf-8", errors="replace",
+                              env=env, timeout=TIMEOUT_S)
 
 
 PROVIDERS: dict[str, Provider] = {p.name: p for p in (ClaudeProvider(),)}
