@@ -16,3 +16,9 @@ recordings/
 
 # izpētes piezīmes — lokālas, ne repo
 RESEARCH.md
+
+# Discord DOM paraugi — lokāla izpēte, ne repo
+discord_html_samples/
+
+# lokālas piezīmes par uzdevumiem
+todo/

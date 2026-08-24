@@ -1,12 +1,21 @@
 # Discord Call Recorder + Speaker Timeline
 
-Chrome extension (MV3) that, during a Discord **web** call:
+![Record Discord calls, see who said what, get AI meeting notes — 100% local](thumbnail.png)
 
-1. records the tab audio mixed with your microphone → `discord-call-<date>.webm` (opus),
-2. reads from the DOM **who is speaking at every moment** (the green indicator = inline `box-shadow: var(--status-speaking)` style) → `*.speakers.json` and `*.speakers.srt`,
-3. hands everything to a local native host that transcribes the call with whisper.cpp, attributes every line to a speaker, stores the result in SQLite and (optionally) generates a Claude report with a summary and action items.
+**Record any Discord call and get a transcript where every line says who said it — plus an AI summary with action items. All on your own machine.**
 
-Everything runs locally — no audio ever leaves the machine (the only optional network step is the `claude -p` report, which uses your own Claude subscription).
+Ever left a long Discord call and immediately forgotten who promised what? This Chrome extension fixes that. While you're in a Discord **web** call it quietly does three things:
+
+- 🎙 **Records the call** — the tab audio mixed with your microphone, saved as a compact `.webm`.
+- 🗣 **Tracks who is speaking, second by second** — by watching Discord's own green speaking indicator, so no voice-fingerprinting guesswork is involved.
+- 📝 **Transcribes and attributes every line** — whisper.cpp runs locally, the speaker timeline maps each sentence to the right person, and everything lands in a searchable SQLite database.
+
+Then it goes further:
+
+- ✅ **Meeting report** *(optional)* — Claude turns the transcript into a summary, key decisions and action items.
+- ✏️ **Built-in editor** — click any line to replay that exact moment of audio, fix a name or a word, and your edits survive re-transcription.
+
+**Private by design.** The audio never leaves your machine: recording, speaker detection and transcription are all local. The only optional network step is the Claude report, which uses your own Claude subscription.
 
 ## Requirements
 
@@ -18,65 +27,87 @@ Everything runs locally — no audio ever leaves the machine (the only optional 
 | whisper.cpp (`whisper-cli`) | local speech-to-text | any recent |
 | Claude Code CLI (`claude`) | optional `--report` step (summary + action items) | optional |
 
-## Installation
+## Installation (step-by-step)
 
-### 1. Load the extension (all platforms)
+### Step 1 — Clone the repository
+
+```bash
+git clone https://github.com/nikitacunskis/discord-meet-recorder.git
+cd discord-meet-recorder
+```
+
+Keep the folder where you want it to live — the native host is registered with an
+absolute path to it, so moving it later means re-running the installer (step 4).
+
+### Step 2 — Install the dependencies
+
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install ffmpeg whisper-cpp
+```
+
+Python 3.9+ is also required; macOS ships with it (`python3 --version` to check),
+and no pip packages are needed — the pipeline is stdlib-only.
+
+Verify in a fresh terminal — all three must print something:
+
+```bash
+ffmpeg -version
+whisper-cli --help
+python3 --version
+```
+
+### Step 3 — Load the Chrome extension
 
 1. Chrome → `chrome://extensions`
 2. Enable **Developer mode** (top-right corner)
-3. **Load unpacked** → pick the `extension/` folder
+3. **Load unpacked** → pick the `extension/` folder of this repo
 4. Copy the extension **ID** shown on the card — the next step needs it.
 
-### 2. Install the tools + register the native host
+### Step 4 — Register the native host
 
 The native host gives you auto-save into per-recording folders, automatic
 transcription and the editor backend. Without it the panel still works, but files fall
 back to Downloads and you transcribe manually.
 
-**macOS**
-
 ```bash
-brew install ffmpeg whisper-cpp
 ./native/install.sh <extension-id>
-# fully restart Chrome (Cmd+Q) afterwards
 ```
 
-**Linux (Debian/Ubuntu shown; Chrome or Chromium)**
+Then **fully restart Chrome** (Cmd+Q, not just closing the window). After the restart
+the "Native host" warning line in the extension panel must disappear.
+
+### Step 5 — Whisper models
+
+Nothing to do by default: on the first transcription the models are downloaded
+automatically into `models/`.
+
+To skip the automatic download (or reuse models you already have from another
+whisper.cpp-based project), place these two files into `models/` yourself:
+
+| File | Source project | Size |
+|---|---|---|
+| `ggml-large-v3-turbo.bin` | [whisper.cpp models](https://huggingface.co/ggerganov/whisper.cpp) | ~1.6 GB |
+| `ggml-silero-v5.1.2.bin` | [Silero VAD (whisper.cpp build)](https://huggingface.co/ggml-org/whisper-vad) | ~2 MB |
 
 ```bash
-sudo apt install ffmpeg cmake build-essential python3
-
-# whisper.cpp is not packaged in most distros — build once from source:
-git clone https://github.com/ggml-org/whisper.cpp
-cd whisper.cpp && cmake -B build && cmake --build build -j
-sudo cp build/bin/whisper-cli /usr/local/bin/
-cd ..
-
-./native/install.sh <extension-id>   # registers for Chrome and/or Chromium
-# fully restart the browser afterwards
+mkdir -p models
+curl -L -o models/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+curl -L -o models/ggml-silero-v5.1.2.bin \
+  https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin
 ```
 
-**Windows (PowerShell)**
+If another project on your machine already downloaded the same `ggml-*.bin` files,
+copying (or symlinking) them into `models/` works too — the files are identical.
 
-```powershell
-winget install Python.Python.3.12 Gyan.FFmpeg
-# whisper.cpp: download the latest whisper-bin-x64.zip from
-#   https://github.com/ggml-org/whisper.cpp/releases
-# unzip it and add the folder containing whisper-cli.exe to PATH
-# (Settings -> System -> About -> Advanced system settings -> Environment Variables)
+### Step 6 — Claude CLI (optional, for the `--report` step)
 
-cd native
-.\install.ps1 <extension-id>   # creates dvt_host.bat + registry entry, no admin needed
-# fully restart Chrome afterwards
-```
-
-Verify: `ffmpeg -version`, `whisper-cli --help` and `python3 --version` (Windows:
-`python --version`) must all work in a fresh terminal. In the extension panel the
-"Native host" warning line must disappear after the restart.
-
-**Claude CLI (optional, for `--report`)** — install per
-[claude.com/claude-code](https://claude.com/claude-code) (`npm install -g @anthropic-ai/claude-code`
-works on all three platforms), then pick your instance in the panel settings.
+Install per [claude.com/claude-code](https://claude.com/claude-code)
+(`npm install -g @anthropic-ai/claude-code`), then pick your instance in the
+panel settings. Without it everything works except the generated summary /
+action-items report.
 
 ## Usage
 
@@ -106,18 +137,13 @@ If the call is mostly in one language, add `--language ru` / `lv` / `en` for few
 ## Troubleshooting the native host
 
 The panel shows a "Native host: not installed" warning when Chrome cannot start the
-host. Check the registration for your platform:
+host. Check the registration file:
 
-- **macOS**: `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.dvt.recorder.json`
-- **Linux**: `~/.config/google-chrome/NativeMessagingHosts/com.dvt.recorder.json`
-  (Chromium: `~/.config/chromium/...`)
-- **Windows**: registry key `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.dvt.recorder`
-  pointing to `native\com.dvt.recorder.json`, which launches `native\dvt_host.bat`
+`~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.dvt.recorder.json`
 
-The `allowed_origins` entry must contain your actual extension ID, and the browser must
-be fully restarted after registration. The host runs with a minimal PATH; on
-macOS/Linux the scripts add Homebrew and `~/.local/bin` themselves — on Windows make
-sure `ffmpeg` and `whisper-cli` are on the *system* PATH.
+The `allowed_origins` entry must contain your actual extension ID, and Chrome must
+be fully restarted (Cmd+Q) after registration. The host runs with a minimal PATH;
+the install script adds Homebrew and `~/.local/bin` itself.
 
 ## How transcription works
 
@@ -134,11 +160,14 @@ sure `ffmpeg` and `whisper-cli` are on the *system* PATH.
 
 ## Known limitations
 
+- **Personal (DM) calls**: speaker detection needs the square participant tiles, not the
+  round avatars. Start streaming anything (e.g. share your screen) — the tiles switch to
+  the square layout and recording + transcription work as usual.
 - The audio is a single mixed track; when two people talk at once the text goes to the
   dominant speaker (with the `A → B` marker when both contributed).
 - Discord class hashes change with every build — selectors match substrings and the
   semantic `--status-speaking` CSS variable, so they usually survive updates. If the
-  panel stops seeing speakers, the selectors need a refresh (see RESEARCH.md, untracked).
+  panel stops seeing speakers, the selectors need a refresh.
 - The recording lives in memory until Stop: ~15 MB/hour, multi-hour calls are fine.
 - Everything audible in the tab is recorded — including Discord beeps.
 
@@ -149,6 +178,6 @@ extension/           Chrome MV3 extension (panel, DOM sensor, editor UI)
 native/              native messaging host + install.sh
 tools/transcribe.py  whisper.cpp pipeline: blocks, attribution, SQLite, Claude report
 tools/dvtdb.py       shared SQLite schema (recordings, text_lines)
-recordings/          one folder per recording + dvt.sqlite (gitignored)
-models/              whisper models (gitignored, self-downloading)
+recordings/          one folder per recording + dvt.sqlite (your local data)
+models/              whisper models (downloaded on first run)
 ```
