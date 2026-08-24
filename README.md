@@ -63,7 +63,9 @@ python3 --version
 1. Chrome → `chrome://extensions`
 2. Enable **Developer mode** (top-right corner)
 3. **Load unpacked** → pick the `extension/` folder of this repo
-4. Copy the extension **ID** shown on the card — the next step needs it.
+4. A one-time notice page opens — please read it (it is the short version of the
+   [Disclaimer](#disclaimer) below) and click **I understand**.
+5. Copy the extension **ID** shown on the card — the next step needs it.
 
 ### Step 4 — Register the native host
 
@@ -170,6 +172,27 @@ the install script adds Homebrew and `~/.local/bin` itself.
   panel stops seeing speakers, the selectors need a refresh.
 - The recording lives in memory until Stop: ~15 MB/hour, multi-hour calls are fine.
 - Everything audible in the tab is recorded — including Discord beeps.
+
+## Disclaimer
+
+1. This plugin was created by an enthusiast — [Nikita Cunskis](https://x.com/nikitacunskis).
+2. It is **not an official Discord product** and is not affiliated with or endorsed by
+   Discord Inc. Before using it, please review the current
+   [Discord Terms of Service](https://discord.com/terms) and
+   [Community Guidelines](https://discord.com/guidelines). At the time of creation the
+   plugin did not fall under any of their restrictions, but that may have changed since.
+3. Check the rules of the server where you use the plugin.
+4. If you are in the EU or any other country that protects user data — especially one
+   following the **GDPR** — it is your duty to inform everyone in the room that the call
+   is being recorded and what the recording will be used for.
+5. If you use the AI add-on, your conversation is sent for post-processing to Anthropic,
+   OpenAI (for the Codex version) or another cloud LLM provider. This may conflict with
+   (a) the policy of the company you work for, (b) the server rules, (c) the current
+   revision of the Discord rules, (d) the law.
+
+All of the above is **your responsibility**, because the solution is self-hosted and
+lives on your device. You decide when recording starts and ends. You decide whether
+anything is sent to Anthropic. You use your own Claude subscription and account.
 
 ## Layout
 

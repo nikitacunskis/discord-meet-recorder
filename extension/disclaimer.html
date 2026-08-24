@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title data-i18n="dscTitle">Before you start</title>
+  <style>
+    :root {
+      --bg: #f4f5f7; --text: #222; --muted: #555; --accent: #23a55a;
+      --accent-hover: #1a6334; --card: #fff; --link: #4752c4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1e1f22; --text: #dbdee1; --muted: #b5bac1;
+              --card: #2b2d31; --link: #949cf7; }
+    }
+    body { font: 15px/1.65 -apple-system, system-ui, sans-serif; background: var(--bg);
+           color: var(--text); display: grid; place-items: center; min-height: 100vh;
+           margin: 0; padding: 24px; box-sizing: border-box; }
+    .card { max-width: 640px; background: var(--card); border-radius: 12px;
+            padding: 32px 36px; box-shadow: 0 4px 24px rgba(0,0,0,.12); }
+    h1 { font-size: 22px; margin: 0 0 14px; }
+    ol { margin: 0 0 18px; padding-left: 22px; }
+    li { margin-bottom: 12px; }
+    p.final { color: var(--muted); margin: 0 0 22px; }
+    a { color: var(--link); }
+    button { font-size: 16px; padding: 12px 28px; border: 0; border-radius: 6px;
+             background: var(--accent); color: #fff; cursor: pointer; }
+    button:hover { background: var(--accent-hover); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 data-i18n="dscTitle">Before you start</h1>
+    <ol>
+      <li><span data-i18n="dscP1">This plugin was created by an enthusiast —</span>
+        <a href="https://x.com/nikitacunskis" target="_blank" rel="noopener">Nikita Cunskis</a>.</li>
+      <li><span data-i18n="dscP2">This is not an official Discord product. Before using it, please review the current</span>
+        <a href="https://discord.com/terms" target="_blank" rel="noopener" data-i18n="dscTos">Discord Terms of Service</a>
+        <span data-i18n="dscAnd">and</span>
+        <a href="https://discord.com/guidelines" target="_blank" rel="noopener" data-i18n="dscGuide">Community Guidelines</a>.
+        <span data-i18n="dscP2b">At the time of creation the plugin did not fall under any of their restrictions, but that may have changed since.</span></li>
+      <li data-i18n="dscP3">Check the rules of the server where you use the plugin.</li>
+      <li data-i18n="dscP4">If you are in the EU or any other country that protects user data — especially one following the GDPR — it is your duty to inform everyone in the room that the call is being recorded and what it will be used for.</li>
+      <li data-i18n="dscP5">If you use the AI add-on, your conversation is sent for post-processing to Anthropic, OpenAI (for the Codex version) or another cloud LLM provider. This may conflict with (a) the policy of the company you work for, (b) the server rules, (c) the current revision of the Discord rules, (d) the law.</li>
+    </ol>
+    <p class="final" data-i18n="dscP6">All of the above is your responsibility, because the solution is self-hosted and lives on your device. You decide when recording starts and ends. You decide whether anything is sent to Anthropic. You use your own Claude subscription and account.</p>
+    <button id="ack" data-i18n="dscBtn">I understand</button>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="disclaimer.js"></script>
+</body>
+</html>
