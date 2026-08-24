@@ -53,8 +53,12 @@ back to Downloads and you transcribe manually.
 
 ```powershell
 cd native
-.\install.ps1 <extension-id>
+powershell -ExecutionPolicy Bypass -File .\install.ps1 <extension-id>
 ```
+
+Do not double-click the file or run it as a bare `install.ps1` command — Windows
+opens `.ps1` files in Notepad instead of running them, and the default execution
+policy blocks scripts (that is what `-ExecutionPolicy Bypass` is for).
 
 The script also checks that `python`, `ffmpeg` and `whisper-cli` are reachable and
 prints a hint for anything missing. No admin rights are needed — it creates
@@ -70,7 +74,7 @@ automatically into `models/`. To fetch them right away instead, run the installe
 with the extra switch:
 
 ```powershell
-.\install.ps1 <extension-id> -DownloadModels
+powershell -ExecutionPolicy Bypass -File .\install.ps1 <extension-id> -DownloadModels
 ```
 
 Or place the two files into `models/` yourself:
