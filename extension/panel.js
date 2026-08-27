@@ -623,15 +623,35 @@ function renderRecList(msg) {
   if (msg.pages > 1) {
     const pager = document.createElement('div');
     pager.className = 'pager';
-    for (let p = 0; p < msg.pages; p++) {
+    let prev = -1;
+    for (const p of pagerItems(msg.page, msg.pages)) {
+      if (prev >= 0 && p - prev > 1) {
+        const gap = document.createElement('span');
+        gap.className = 'gap';
+        gap.textContent = '…';
+        pager.appendChild(gap);
+      }
       const b = document.createElement('button');
       b.textContent = String(p + 1);
       if (p === msg.page) b.classList.add('current');
       b.addEventListener('click', () => { recPage = p; requestList(); });
       pager.appendChild(b);
+      prev = p;
     }
     el.appendChild(pager);
   }
+}
+
+// Page indices (0-based) to show. Up to 6 pages: all of them.
+// More: first, last, and a 3-wide window around the current page,
+// e.g. 1 2 3 … 13 / 1 … 6 7 8 … 13 / 1 … 11 12 13.
+function pagerItems(cur, pages) {
+  if (pages <= 6) return Array.from({ length: pages }, (_, i) => i);
+  const lo = Math.max(0, Math.min(cur - 1, pages - 3));
+  const hi = Math.min(pages - 1, lo + 2);
+  const set = new Set([0, pages - 1]);
+  for (let p = lo; p <= hi; p++) set.add(p);
+  return [...set].sort((a, b) => a - b);
 }
 
 function b64(u8) {
