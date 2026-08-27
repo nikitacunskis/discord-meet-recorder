@@ -168,6 +168,7 @@ fieldset.steps {
 }
 .pager button:hover { background: var(--surface-2); }
 .pager button.current { background: var(--chip-bg); color: #fff; border-color: var(--chip-bg); }
+.pager .gap { min-width: 16px; height: 32px; line-height: 32px; text-align: center; color: var(--muted); user-select: none; }
 
 .events-head { display: flex; align-items: center; gap: 10px; }
 .events-head h2 { margin: 18px 0 8px; }
