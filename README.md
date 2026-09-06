@@ -206,3 +206,8 @@ tools/dvtdb.py       shared SQLite schema (recordings, text_lines)
 recordings/          one folder per recording + dvt.sqlite (your local data)
 models/              whisper models (downloaded on first run)
 ```
+
+
+---
+
+Built by [Nikita Cunskis](https://cunskis.lv/) — senior engineer and fractional CTO, Riga. More tools: [cunskis.lv/open-source](https://cunskis.lv/open-source).
