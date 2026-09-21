@@ -115,9 +115,34 @@
   </div>
 
   <h2 data-i18n="recordings">Ieraksti</h2>
-  <div class="search-wrap">
-    <input type="search" id="recSearch" data-i18n-ph="searchPh" placeholder="meklē pēc ID, nosaukuma vai satura" />
-    <span class="search-icon"></span>
+  <div class="search-row">
+    <div class="search-wrap">
+      <input type="search" id="recSearch" data-i18n-ph="searchPh" placeholder="meklē pēc ID, nosaukuma vai satura" />
+      <span class="search-icon"></span>
+    </div>
+    <button id="dateBtn" type="button"></button>
+    <div id="datePop" class="date-pop" hidden>
+      <div class="seg">
+        <button type="button" data-mode="days" data-i18n="dfDays">Dienas</button>
+        <button type="button" data-mode="range" data-i18n="dfRange">No – līdz</button>
+      </div>
+      <div class="cal-head">
+        <button type="button" id="calPrev">‹</button>
+        <span id="calMonth"></span>
+        <button type="button" id="calNext">›</button>
+      </div>
+      <div id="calGrid" class="cal-grid"></div>
+      <div id="calHint" class="cal-hint muted"></div>
+      <div class="cal-foot">
+        <button type="button" id="calToday" data-i18n="dfToday">Šodien</button>
+        <button type="button" id="calClear" data-i18n="dfClear">Notīrīt</button>
+        <button type="button" id="calDone" class="primary" data-i18n="dfDone">Gatavs</button>
+      </div>
+    </div>
+  </div>
+  <div id="dateChip" class="date-chip" hidden>
+    <span id="dateChipText"></span>
+    <button type="button" id="dateChipX"></button>
   </div>
   <div id="recList" class="muted">—</div>
 

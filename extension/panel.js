@@ -301,6 +301,7 @@ for (const id of SETTINGS_KEYS)
       I18N.setLang(document.getElementById(id).value);
       renderMicBtn();
       populateWhisperLangs();
+      renderDateUi();
     }
   });
 loadSettings().then(() => I18N.init().then(() => {
@@ -309,6 +310,7 @@ loadSettings().then(() => I18N.init().then(() => {
   populateWhisperLangs();
   syncPipelineLock();
   syncAiAll();
+  renderDateUi();
 }));
 
 document.getElementById('dirBtn').innerHTML = DVT_ICONS.folder;
@@ -486,7 +488,7 @@ function requestList() {
   if (nativePort)
     nativePort.postMessage({
       type: 'list', dir: collectSettings().outDir,
-      page: recPage, pageSize: 5, q: recQuery,
+      page: recPage, pageSize: 5, q: recQuery, dates: [...dateSel].sort(),
     });
 }
 
@@ -499,6 +501,175 @@ els.search.addEventListener('input', () => {
     requestList();
   }, 300);
 });
+
+// ---- date filter: pick one day, several days, or a from–to range ----
+// Days come from the recording ID (discord-call-YYYYMMDD-…); the native host
+// filters by them and returns `days` (dates that have recordings) for dots.
+const dateSel = new Set();
+let dateMode = 'days';
+let rangeAnchor = null;
+let rangeHover = null;
+let recDays = new Set();
+let calView = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+const dateEls = {
+  btn: document.getElementById('dateBtn'),
+  pop: document.getElementById('datePop'),
+  month: document.getElementById('calMonth'),
+  grid: document.getElementById('calGrid'),
+  hint: document.getElementById('calHint'),
+  chip: document.getElementById('dateChip'),
+  chipText: document.getElementById('dateChipText'),
+};
+dateEls.btn.innerHTML = DVT_ICONS.calendar;
+document.getElementById('dateChipX').innerHTML = DVT_ICONS.x;
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const keyDate = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const fmtDay = (k) => { const [y, m, d] = k.split('-'); return `${d}.${m}.${y}`; };
+
+function daysBetween(a, b) {
+  if (a > b) [a, b] = [b, a];
+  const out = [];
+  for (let d = keyDate(a); dayKey(d) <= b; d.setDate(d.getDate() + 1)) out.push(dayKey(d));
+  return out;
+}
+
+function onDatesChanged() {
+  recPage = 0;
+  renderDateUi();
+  requestList();
+}
+
+function renderDateUi() {
+  dateEls.btn.title = t('dfBtn');
+  dateEls.btn.classList.toggle('active', dateSel.size > 0);
+  const sel = [...dateSel].sort();
+  dateEls.chip.hidden = sel.length === 0;
+  if (sel.length) {
+    const contiguous = sel.length > 1 && daysBetween(sel[0], sel[sel.length - 1]).length === sel.length;
+    dateEls.chipText.textContent =
+      sel.length === 1 ? fmtDay(sel[0])
+        : contiguous ? `${fmtDay(sel[0])} – ${fmtDay(sel[sel.length - 1])}`
+        : sel.length <= 3 ? sel.map(fmtDay).join(', ')
+        : `${sel.length} ${t('dfNDays')}`;
+    dateEls.chip.title = sel.map(fmtDay).join(', ');
+  }
+  if (!dateEls.pop.hidden) renderCalendar();
+}
+
+function renderCalendar() {
+  dateEls.pop.querySelectorAll('.seg button').forEach(
+    (b) => b.classList.toggle('on', b.dataset.mode === dateMode));
+  dateEls.month.textContent = calView.toLocaleDateString(I18N.lang, { month: 'long', year: 'numeric' });
+  dateEls.hint.textContent = dateMode === 'days' ? t('dfHintDays')
+    : rangeAnchor ? t('dfHintTo') : t('dfHintFrom');
+
+  const g = dateEls.grid;
+  g.innerHTML = '';
+  // Weekday header, Monday first.
+  for (let i = 0; i < 7; i++) {
+    const wd = document.createElement('span');
+    wd.className = 'wd';
+    wd.textContent = new Date(2024, 0, 1 + i).toLocaleDateString(I18N.lang, { weekday: 'short' });
+    g.appendChild(wd);
+  }
+  const first = new Date(calView);
+  first.setDate(1 - ((first.getDay() + 6) % 7));
+  const today = dayKey(new Date());
+  const preview = rangeAnchor && rangeHover ? new Set(daysBetween(rangeAnchor, rangeHover)) : null;
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(first);
+    d.setDate(first.getDate() + i);
+    if (i === 35 && d.getMonth() !== calView.getMonth()) break; // 5-row months
+    const k = dayKey(d);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'day';
+    b.textContent = d.getDate();
+    b.title = fmtDay(k);
+    if (d.getMonth() !== calView.getMonth()) b.classList.add('out');
+    if (k === today) b.classList.add('today');
+    if (recDays.has(k)) b.classList.add('has');
+    if (dateSel.has(k)) b.classList.add('sel');
+    if (k === rangeAnchor) b.classList.add('anchor');
+    if (preview && preview.has(k) && !dateSel.has(k)) b.classList.add('preview');
+    b.addEventListener('click', () => pickDay(k));
+    b.addEventListener('mouseenter', () => {
+      if (rangeAnchor && rangeHover !== k) { rangeHover = k; renderCalendar(); }
+    });
+    g.appendChild(b);
+  }
+}
+
+function pickDay(k) {
+  if (dateMode === 'days') {
+    dateSel.has(k) ? dateSel.delete(k) : dateSel.add(k);
+  } else if (!rangeAnchor) {
+    rangeAnchor = k;
+    rangeHover = k;
+    dateSel.clear();
+    dateSel.add(k);
+  } else {
+    dateSel.clear();
+    daysBetween(rangeAnchor, k).forEach((d) => dateSel.add(d));
+    rangeAnchor = rangeHover = null;
+  }
+  onDatesChanged();
+}
+
+function closeDatePop() {
+  dateEls.pop.hidden = true;
+  rangeAnchor = rangeHover = null;
+}
+
+dateEls.btn.addEventListener('click', () => {
+  if (!dateEls.pop.hidden) return closeDatePop();
+  const sel = [...dateSel].sort();
+  if (sel.length) calView = new Date(keyDate(sel[sel.length - 1]).setDate(1));
+  dateEls.pop.hidden = false;
+  renderCalendar();
+});
+dateEls.pop.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
+  dateMode = b.dataset.mode;
+  rangeAnchor = rangeHover = null;
+  renderCalendar();
+}));
+document.getElementById('calPrev').addEventListener('click', () => {
+  calView.setMonth(calView.getMonth() - 1); renderCalendar();
+});
+document.getElementById('calNext').addEventListener('click', () => {
+  calView.setMonth(calView.getMonth() + 1); renderCalendar();
+});
+document.getElementById('calToday').addEventListener('click', () => {
+  const now = new Date();
+  calView = new Date(now.getFullYear(), now.getMonth(), 1);
+  rangeAnchor = rangeHover = null;
+  dateSel.clear();
+  dateSel.add(dayKey(now));
+  onDatesChanged();
+});
+document.getElementById('calClear').addEventListener('click', () => {
+  rangeAnchor = rangeHover = null;
+  dateSel.clear();
+  onDatesChanged();
+});
+document.getElementById('calDone').addEventListener('click', closeDatePop);
+document.getElementById('dateChipX').addEventListener('click', () => {
+  dateSel.clear();
+  onDatesChanged();
+});
+dateEls.grid.addEventListener('mouseleave', () => {
+  if (rangeAnchor) { rangeHover = rangeAnchor; renderCalendar(); }
+});
+document.addEventListener('click', (e) => {
+  if (!dateEls.pop.hidden && !dateEls.pop.contains(e.target) && !dateEls.btn.contains(e.target)
+      && e.target.isConnected) closeDatePop();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !dateEls.pop.hidden) closeDatePop();
+});
+renderDateUi();
 
 function onNativeMsg(msg) {
   if (msg.type === 'pong') {
@@ -539,6 +710,8 @@ function renderRecList(msg) {
   const el = document.getElementById('recList');
   if (renameInProgress) return; // don't destroy an in-progress rename input
   recPage = msg.page;
+  recDays = new Set(msg.days || []);
+  if (!dateEls.pop.hidden) renderCalendar();
   el.classList.remove('muted');
   el.innerHTML = '';
   if (!msg.items || msg.items.length === 0) {

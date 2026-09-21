@@ -161,9 +161,18 @@ def _search_bases(db, q: str) -> set:
         (like, like, like, like))
     return {r["base"] for r in rows}
 
+_STEM_DATE = __import__("re").compile(r"(\d{4})(\d{2})(\d{2})")
+
+def _stem_day(stem: str) -> str | None:
+    """discord-call-20260921-094445 -> '2026-09-21'."""
+    m = _STEM_DATE.search(stem)
+    return "-".join(m.groups()) if m else None
+
 def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
-                    q: str = "") -> dict:
+                    q: str = "", dates: list | None = None) -> dict:
     items = []
+    days = set()
+    want = set(dates or [])
     if dirpath.exists():
         found = list(dirpath.glob("*/*.webm")) + list(dirpath.glob("*.webm"))
         db = dvtdb.connect()
@@ -177,6 +186,11 @@ def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
             if matched is not None and f.stem not in matched \
                     and q.lower() not in f.stem.lower():
                 continue
+            day = _stem_day(f.stem)
+            if day:
+                days.add(day)
+            if want and day not in want:
+                continue
             b = str(f.with_suffix(""))
             items.append({
                 "base": f.stem,
@@ -189,7 +203,8 @@ def list_recordings(dirpath: Path, page: int = 0, page_size: int = 5,
     pages = max(1, -(-total // page_size))
     page = max(0, min(page, pages - 1))
     return {"items": items[page * page_size:(page + 1) * page_size],
-            "page": page, "pages": pages, "total": total}
+            "page": page, "pages": pages, "total": total,
+            "days": sorted(days)}
 
 def find_audio(base: str, base_dir: Path) -> Path | None:
     for cand in (base_dir / base / f"{base}.webm", base_dir / f"{base}.webm"):
@@ -360,7 +375,8 @@ def main() -> None:
             d = Path(msg.get("dir") or base_dir).expanduser()
             res = list_recordings(d, int(msg.get("page") or 0),
                                   int(msg.get("pageSize") or 5),
-                                  (msg.get("q") or "").strip())
+                                  (msg.get("q") or "").strip(),
+                                  msg.get("dates") or [])
             res.update({"type": "list", "dir": str(d)})
             send(res)
         elif t == "delete-recording":

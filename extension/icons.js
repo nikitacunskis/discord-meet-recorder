@@ -11,6 +11,7 @@ const DVT_ICONS = {
   search: _I('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'),
   trash: _I('<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>'),
   pencil: _I('<path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/><path d="M14 7l3 3"/>'),
+  calendar: _I('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>'),
   x: _I('<path d="M6 6l12 12M18 6L6 18"/>'),
   play: _I('<path d="M8 5l12 7-12 7z"/>', true),
   pause: _I('<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>', true),
