@@ -117,6 +117,9 @@ class WhisperServer:
                              "text": text})
         return segs
 
+    def alive(self) -> bool:
+        return self.proc.poll() is None
+
     def stop(self) -> None:
         try:
             self.proc.terminate()
@@ -172,7 +175,11 @@ class LiveTranscriber:
         if self.dead:
             return
         try:
+            # Flush every chunk: the pipe is buffered (128 KiB on Python
+            # 3.14), and quiet opus runs ~130 B/s, so without a flush audio
+            # sat in the buffer for minutes before ffmpeg ever saw it.
             self.ffmpeg.stdin.write(data)
+            self.ffmpeg.stdin.flush()
         except (BrokenPipeError, OSError):
             log.error("ffmpeg pipe broken — live transcription disabled")
             self.dead = True
@@ -266,18 +273,33 @@ class LiveTranscriber:
                     target = self._pick_target()
                     intervals = [dict(iv) for iv in self.intervals]
                     done = self.done_ms
-                if self.server is None:
-                    model = T.ensure_model(self.settings.get("model",
-                                                            "large-v3-turbo"))
-                    vad = T.ensure_model(T.VAD_MODEL, T.VAD_MODEL_URL)
-                    self.server = WhisperServer(model, vad)
-                    self.server.wait_ready()
+                self._ensure_server()
                 self._transcribe_region(done, target, intervals)
                 with self.cond:
                     self.done_ms = target
         except Exception:
             log.exception("Live worker died")
             self.dead = True
+
+    def _ensure_server(self) -> None:
+        """Start whisper-server, or restart it if the process has died —
+        otherwise every later block fails with 'Connection refused'."""
+        if self.server is not None and self.server.alive():
+            return
+        if self.server is not None:
+            log.error("whisper-server died (rc=%s) — restarting",
+                      self.server.proc.returncode)
+            self.server.stop()
+            self.server = None
+        model = T.ensure_model(self.settings.get("model", "large-v3-turbo"))
+        vad = T.ensure_model(T.VAD_MODEL, T.VAD_MODEL_URL)
+        server = WhisperServer(model, vad)
+        try:
+            server.wait_ready()
+        except Exception:
+            server.stop()
+            raise
+        self.server = server
 
     def _transcribe_region(self, start_ms: int, end_ms: int,
                            intervals: list[dict]) -> None:
@@ -300,8 +322,16 @@ class LiveTranscriber:
             try:
                 segs = self.server.transcribe(pcm, self.language)
             except Exception:
-                log.exception("Inference failed for block [%d..%d]", bs, be)
-                continue
+                if self.server.alive():
+                    log.exception("Inference failed for block [%d..%d]", bs, be)
+                    continue
+                # The server crashed on this block: restart and retry once.
+                self._ensure_server()
+                try:
+                    segs = self.server.transcribe(pcm, self.language)
+                except Exception:
+                    log.exception("Inference failed for block [%d..%d]", bs, be)
+                    continue
             for seg in segs:
                 text = seg["text"]
                 if be - bs <= T.HALLUCINATION_BLOCK_MS and T.is_hallucination(text):
