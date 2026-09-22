@@ -7,10 +7,10 @@
  * The panel mic button and Discord's own mute/deafen switches (mirrored by
  * content.js as `dvt-mic`) both drive the same gain.
  * Chunks stream to the native host `com.dvt.recorder` continuously as the
- * recorder emits them; cumulative speaker-timeline snapshots (`events`) are
- * sent at silence boundaries (cut: true — safe places to split for live
- * transcription) and at least every 10 s. Falls back to plain Downloads when
- * the host is unavailable.
+ * recorder emits them (every 250 ms); every speaking-indicator change goes
+ * to the host at once (`speaking`) so live transcription can cut phrases on
+ * it, and a cumulative speaker-timeline snapshot (`events`) every 10 s.
+ * Falls back to plain Downloads when the host is unavailable.
  */
 const els = {
   sensor: document.getElementById('sensor'),
@@ -34,7 +34,6 @@ let streaming = false;
 let sessionBase = null;
 let startPending = false;
 let savePending = false;
-let lastVoiceTs = 0;
 let lastEventsSent = 0;
 let flushChain = Promise.resolve();
 let events = [];
@@ -70,19 +69,25 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type !== 'dvt-speaking') return;
 
   statusline(els.sensor, null);
-  lastVoiceTs = Date.now();
   const key = msg.userId || msg.name;
   if (msg.speaking) speakingNow.set(key, msg.name);
   else speakingNow.delete(key);
   renderParticipants();
 
   if (recorder && recorder.state === 'recording') {
-    voiceSinceEvents = true;
     const t_ms = Math.max(0, msg.t - t0);
-    events.push({ name: msg.name, userId: msg.userId || null, speaking: msg.speaking, t_ms });
+    pushSpeaking(msg.name, msg.userId || null, msg.speaking, t_ms);
     logLine(`${fmtTime(t_ms)} ${msg.speaking ? '▶' : '⏹'} ${msg.name}`, msg.speaking ? 'on' : 'off');
   }
 });
+
+/** One indicator change: kept for the speaker timeline and forwarded to the
+ * host at once — live transcription cuts phrases on these, not on silence. */
+function pushSpeaking(name, userId, speaking, t_ms) {
+  const ev = { name, userId, speaking, t_ms };
+  events.push(ev);
+  if (streaming && nativePort) nativePort.postMessage({ type: 'speaking', ...ev });
+}
 
 function renderParticipants() {
   const speaking = new Set(speakingNow.values());
@@ -685,7 +690,8 @@ function onNativeMsg(msg) {
   } else if (msg.type === 'log') {
     logLine(msg.line);
   } else if (msg.type === 'live') {
-    addLiveLines(msg.lines);
+    if (msg.draft) setLiveDraft(msg.draft);
+    else addLiveLines(msg.lines, msg.done);
   } else if (msg.type === 'done') {
     setStatus(msg.code === 0 ? t('transDone') + msg.base : t('transFail'));
     requestList();
@@ -859,8 +865,6 @@ function speakersPayload(durMs) {
 
 // Streaming: every recorder chunk goes to the host immediately. flushChain
 // serializes the async blob→base64 conversions so chunk order is preserved.
-let voiceSinceEvents = false;
-
 function postChunk(blob) {
   flushChain = flushChain.then(async () => {
     const CHUNK = 256 * 1024;
@@ -871,24 +875,20 @@ function postChunk(blob) {
   return flushChain;
 }
 
-/** Cumulative speaker snapshot. cut: true marks a silence boundary — a safe
- * place for the host to split the audio for live transcription. */
-function postEvents(cut) {
+/** Cumulative speaker snapshot, so an aborted recording still has its
+ * speaker files. Live transcription does not use it (see pushSpeaking). */
+function postEvents() {
   lastEventsSent = Date.now();
-  voiceSinceEvents = false;
   const payload = speakersPayload(Date.now() - t0);
   flushChain = flushChain.then(() => {
-    nativePort && nativePort.postMessage({ type: 'events', cut: !!cut, ...payload });
+    nativePort && nativePort.postMessage({ type: 'events', ...payload });
   });
   return flushChain;
 }
 
 function onStreamChunk(blob) {
   postChunk(blob);
-  const now = Date.now();
-  const silence = speakingNow.size === 0 && now - lastVoiceTs >= 1000;
-  if (silence && voiceSinceEvents && now - lastEventsSent >= 2000) postEvents(true);
-  else if (now - lastEventsSent >= 10000) postEvents(false);
+  if (Date.now() - lastEventsSent >= 10000) postEvents();
 }
 
 // ---- live transcript (host-side incremental whisper during the call) ----
@@ -904,19 +904,47 @@ function clearLive() {
   liveLog.innerHTML = '';
 }
 
-function addLiveLines(lines) {
+function showLive() {
+  if (!liveLog.hidden) return;
+  liveLog.hidden = false;
+  liveToggle.dataset.i18n = 'hide';
+  liveToggle.textContent = t('hide');
+}
+
+function liveLineEl(l) {
+  const div = document.createElement('div');
+  div.textContent = `[${fmtTime(l.start_ms)}] ${l.speaker}: ${l.text}`;
+  return div;
+}
+
+/** Final lines go before the draft (the phrase still being spoken), which
+ * always stays last. `done` names the draft these lines replace. */
+function addLiveLines(lines, done) {
+  const draft = liveLog.querySelector('.draft');
+  if (draft && done != null && Number(draft.dataset.id) === done) draft.remove();
   if (!Array.isArray(lines) || lines.length === 0) return;
-  if (liveLog.hidden) {
-    liveLog.hidden = false;
-    liveToggle.dataset.i18n = 'hide';
-    liveToggle.textContent = t('hide');
+  showLive();
+  const before = liveLog.querySelector('.draft');
+  for (const l of lines) liveLog.insertBefore(liveLineEl(l), before);
+  while (liveLog.childElementCount > 500 && liveLog.firstChild !== before)
+    liveLog.firstChild.remove();
+  liveLog.scrollTop = liveLog.scrollHeight;
+}
+
+/** The open phrase, re-transcribed every couple of seconds: rewritten in
+ * place until its final lines arrive. */
+function setLiveDraft(draft) {
+  if (!draft || !Array.isArray(draft.lines)) return;
+  let el = liveLog.querySelector('.draft');
+  if (el && Number(el.dataset.id) !== draft.id) { el.remove(); el = null; }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'draft';
+    el.dataset.id = draft.id;
+    liveLog.appendChild(el);
   }
-  for (const l of lines) {
-    const div = document.createElement('div');
-    div.textContent = `[${fmtTime(l.start_ms)}] ${l.speaker}: ${l.text}`;
-    liveLog.appendChild(div);
-  }
-  while (liveLog.childElementCount > 500) liveLog.firstChild.remove();
+  el.replaceChildren(...draft.lines.map(liveLineEl));
+  if (draft.lines.length) showLive();
   liveLog.scrollTop = liveLog.scrollHeight;
 }
 
@@ -1047,9 +1075,7 @@ async function startRecording() {
     chunks = [];
     events = [];
     savePending = false;
-    lastVoiceTs = 0;
     lastEventsSent = 0;
-    voiceSinceEvents = false;
     flushChain = Promise.resolve();
     t0 = Date.now();
     sessionBase = 'discord-call-' + tsName(t0);
@@ -1064,11 +1090,11 @@ async function startRecording() {
       else chunks.push(e.data);
     };
     recorder.onstop = onRecorderStop;
-    recorder.start(1000);
+    // Short timeslice: the host gets audio for the live draft within ~0.25 s.
+    recorder.start(250);
 
-    for (const [key, name] of speakingNow) {
-      events.push({ name, userId: key === name ? null : key, speaking: true, t_ms: 0 });
-    }
+    for (const [key, name] of speakingNow)
+      pushSpeaking(name, key === name ? null : key, true, 0);
 
     document.body.classList.add('rec');
     els.recBtn.dataset.i18n = 'stop';

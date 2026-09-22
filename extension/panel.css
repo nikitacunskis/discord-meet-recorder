@@ -187,6 +187,7 @@ fieldset.steps {
 .console div { padding: 1px 0; }
 .console .on { color: #34c46b; }
 .console .off { color: #9aa0a6; }
+.console .draft { color: #9aa0a6; font-style: italic; }
 
 #cmd {
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
