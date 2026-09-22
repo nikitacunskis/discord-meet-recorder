@@ -432,11 +432,14 @@ def main() -> None:
             out.write(data)
             if live_session is not None:
                 live_session.feed(data)
+        elif t == "speaking" and out:
+            if live_session is not None:
+                live_session.on_speaking(msg)
         elif t == "events" and out:
             speakers = msg.get("speakers")
             srt = msg.get("srt")
             if live_session is not None:
-                live_session.on_events(speakers, bool(msg.get("cut")))
+                live_session.on_events(speakers)
         elif t == "finish" and out:
             fh, out = out, None
             stop_live()
